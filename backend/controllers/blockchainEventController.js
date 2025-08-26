@@ -121,24 +121,25 @@ class BlockchainEventController {
     if (this.isListening) return;
 
     try {
-      // Setup WebSocket connection handlers
-      this.wsProvider.on('connect', () => {
-        logger.info('Blockchain WebSocket connected');
-        this.isListening = true;
-        this.reconnectAttempts = 0;
+      // ✅ Use block event to know we're connected
+      this.wsProvider.on('block', (blockNumber) => {
+        if (!this.isListening) {
+          logger.info('Blockchain WebSocket connected');
+          this.isListening = true;
+          this.reconnectAttempts = 0;
+        }
+        logger.debug(`New block received: ${blockNumber}`);
       });
-      
-      this.wsProvider.on('disconnect', (error) => {
-        logger.warn('Blockchain WebSocket disconnected:', error);
+
+      // ✅ Still listen for provider errors
+      this.wsProvider.on('error', (error) => {
+        logger.error('Blockchain WebSocket error:', error);
         this.isListening = false;
         this.attemptReconnection();
       });
-      
-      this.wsProvider.on('error', (error) => {
-        logger.error('Blockchain WebSocket error:', error);
-        this.attemptReconnection();
-      });
-      
+
+      // ❌ Removed .on('connect') and .on('disconnect')
+
       // Listen for token events
       if (this.wsContracts.wkcToken) {
         this.wsContracts.wkcToken.on('TokensBurned', (amount, burner, reason, event) => {
@@ -188,46 +189,6 @@ class BlockchainEventController {
       logger.info('WebSocket blockchain event listening started');
     } catch (error) {
       logger.error('Error starting event listeners:', error);
-    }
-  }
-
-  attemptReconnection() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error('Max WebSocket reconnection attempts reached');
-      return;
-    }
-    
-    this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Exponential backoff, max 30s
-    
-    logger.info(`WebSocket reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
-    
-    setTimeout(async () => {
-      try {
-        await this.initialize();
-      } catch (error) {
-        logger.error('WebSocket reconnection failed:', error);
-        this.attemptReconnection();
-      }
-    }, delay);
-  }
-
-  stopEventListening() {
-    try {
-      // Remove all listeners
-      Object.values(this.wsContracts).forEach(contract => {
-        contract.removeAllListeners();
-      });
-      
-      // Close WebSocket connection
-      if (this.wsProvider) {
-        this.wsProvider.destroy();
-      }
-
-      this.isListening = false;
-      logger.info('WebSocket blockchain event listening stopped');
-    } catch (error) {
-      logger.error('Error stopping event listeners:', error);
     }
   }
 

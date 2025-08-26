@@ -466,130 +466,132 @@ class Web3Service {
       throw error;
     }
   }
+  
   // WebSocket Event listeners (no polling!)
-  setupWebSocketEventListeners() {
-    if (this.isListening) {
-      logger.warn('Event listeners already active');
-      return;
-    }
-    
-    try {
-      // Token events
-      if (this.wsContracts.wkcToken) {
-        this.wsContracts.wkcToken.on('TokensBurned', (amount, burner, reason, event) => {
-          logger.blockchain('tokens_burned', {
-            amount: ethers.formatUnits(amount, this.tokenDecimals),
-            burner,
-            reason,
+setupWebSocketEventListeners() {
+  if (this.isListening) {
+    logger.warn('Event listeners already active');
+    return;
+  }
+
+  try {
+    // Token events
+    if (this.wsContracts.wkcToken) {
+      this.wsContracts.wkcToken.on('TokensBurned', (amount, burner, reason, event) => {
+        logger.blockchain('tokens_burned', {
+          amount: ethers.formatUnits(amount, this.tokenDecimals),
+          burner,
+          reason,
+          transactionHash: event.transactionHash
+        });
+        this.handleTokensBurned(amount, burner, reason, event);
+      });
+
+      this.wsContracts.wkcToken.on('Transfer', (from, to, value, event) => {
+        const transferAmount = parseFloat(ethers.formatUnits(value, this.tokenDecimals));
+        if (transferAmount > 1000) {
+          logger.blockchain('large_transfer', {
+            from,
+            to,
+            amount: transferAmount,
             transactionHash: event.transactionHash
           });
-          this.handleTokensBurned(amount, burner, reason, event);
-        });
-        
-        this.wsContracts.wkcToken.on('Transfer', (from, to, value, event) => {
-          // Only log significant transfers to avoid spam
-          const transferAmount = parseFloat(ethers.formatUnits(value, this.tokenDecimals));
-          if (transferAmount > 1000) {
-            logger.blockchain('large_transfer', {
-              from,
-              to,
-              amount: transferAmount,
-              transactionHash: event.transactionHash
-            });
-          }
-        });
-      }
-      // Listen for auction events
-      if (this.wsContracts.auction) {
-        this.wsContracts.auction.on('AuctionCreated', (auctionId, seller, title, startingBid, endTime, isReverse, event) => {
-          logger.blockchain('auction_created', {
-            auctionId: auctionId.toString(),
-            seller,
-            title,
-            startingBid: ethers.formatUnits(startingBid, this.tokenDecimals),
-            isReverse
-          });
-          this.handleAuctionCreated(auctionId, seller, title, startingBid, endTime, isReverse, event);
-        });
-        this.wsContracts.auction.on('BidPlaced', (auctionId, bidder, amount, event) => {
-          logger.blockchain('bid_placed', {
-            auctionId: auctionId.toString(),
-            bidder,
-            amount: ethers.formatUnits(amount, this.tokenDecimals)
-          });
-          this.handleBidPlaced(auctionId, bidder, amount, event);
-        });
-        this.wsContracts.auction.on('AuctionEnded', (auctionId, winner, winningBid, platformFee, burnedAmount, event) => {
-          logger.blockchain('auction_ended', {
-            auctionId: auctionId.toString(),
-            winner,
-            winningBid: ethers.formatUnits(winningBid, this.tokenDecimals),
-            platformFee: ethers.formatUnits(platformFee, this.tokenDecimals),
-            burnedAmount: ethers.formatUnits(burnedAmount, this.tokenDecimals)
-          });
-          this.handleAuctionEnded(auctionId, winner, winningBid, platformFee, burnedAmount, event);
-        });
-        this.wsContracts.auction.on('TokensBurned', (amount, auctionId, reason, event) => {
-          logger.blockchain('auction_tokens_burned', {
-            amount: ethers.formatUnits(amount, this.tokenDecimals),
-            auctionId: auctionId.toString(),
-            reason
-          });
-          this.handleAuctionTokensBurned(amount, auctionId, reason, event);
-        });
-      }
-      // Listen for escrow events
-      if (this.wsContracts.escrow) {
-        this.wsContracts.escrow.on('EscrowCreated', (escrowId, auctionId, buyer, seller, amount, event) => {
-          logger.blockchain('escrow_created', {
-            escrowId: escrowId.toString(),
-            auctionId: auctionId.toString(),
-            buyer,
-            seller,
-            amount: ethers.formatUnits(amount, this.tokenDecimals)
-          });
-          this.handleEscrowCreated(escrowId, auctionId, buyer, seller, amount, event);
-        });
-        this.wsContracts.escrow.on('EscrowCompleted', (escrowId, amount, event) => {
-          logger.blockchain('escrow_completed', {
-            escrowId: escrowId.toString(),
-            amount: ethers.formatUnits(amount, this.tokenDecimals)
-          });
-          this.handleEscrowCompleted(escrowId, amount, event);
-        });
-        this.wsContracts.escrow.on('DisputeRaised', (escrowId, reason, raisedBy, event) => {
-          logger.blockchain('dispute_raised', {
-            escrowId: escrowId.toString(),
-            reason,
-            raisedBy
-          });
-          this.handleDisputeRaised(escrowId, reason, raisedBy, event);
-        });
-      }
-      // Handle WebSocket connection events
-      this.wsProvider._websocket.on("open", () => {
-        logger.info("WebSocket connected");
-        this.isListening = true;
+        }
       });
-      
-      this.wsProvider._websocket.on("close", (code) => {
-        logger.warn("WebSocket closed:", code);
-        this.isListening = false;
-        // Attempt reconnection after delay
-        setTimeout(() => this.reconnectWebSocket(), 5000);
-      });
-      
-      this.wsProvider._websocket.on("error", (error) => {
-        logger.error('WebSocket provider error:', error);
-      });
-      
-      this.isListening = true;
-      logger.info('WebSocket event listeners set up successfully');
-    } catch (error) {
-      logger.error('Error setting up event listeners:', error);
     }
+
+    // Auction events
+    if (this.wsContracts.auction) {
+      this.wsContracts.auction.on('AuctionCreated', (auctionId, seller, title, startingBid, endTime, isReverse, event) => {
+        logger.blockchain('auction_created', {
+          auctionId: auctionId.toString(),
+          seller,
+          title,
+          startingBid: ethers.formatUnits(startingBid, this.tokenDecimals),
+          isReverse
+        });
+        this.handleAuctionCreated(auctionId, seller, title, startingBid, endTime, isReverse, event);
+      });
+
+      this.wsContracts.auction.on('BidPlaced', (auctionId, bidder, amount, event) => {
+        logger.blockchain('bid_placed', {
+          auctionId: auctionId.toString(),
+          bidder,
+          amount: ethers.formatUnits(amount, this.tokenDecimals)
+        });
+        this.handleBidPlaced(auctionId, bidder, amount, event);
+      });
+
+      this.wsContracts.auction.on('AuctionEnded', (auctionId, winner, winningBid, platformFee, burnedAmount, event) => {
+        logger.blockchain('auction_ended', {
+          auctionId: auctionId.toString(),
+          winner,
+          winningBid: ethers.formatUnits(winningBid, this.tokenDecimals),
+          platformFee: ethers.formatUnits(platformFee, this.tokenDecimals),
+          burnedAmount: ethers.formatUnits(burnedAmount, this.tokenDecimals)
+        });
+        this.handleAuctionEnded(auctionId, winner, winningBid, platformFee, burnedAmount, event);
+      });
+
+      this.wsContracts.auction.on('TokensBurned', (amount, auctionId, reason, event) => {
+        logger.blockchain('auction_tokens_burned', {
+          amount: ethers.formatUnits(amount, this.tokenDecimals),
+          auctionId: auctionId.toString(),
+          reason
+        });
+        this.handleAuctionTokensBurned(amount, auctionId, reason, event);
+      });
+    }
+
+    // Escrow events
+    if (this.wsContracts.escrow) {
+      this.wsContracts.escrow.on('EscrowCreated', (escrowId, auctionId, buyer, seller, amount, event) => {
+        logger.blockchain('escrow_created', {
+          escrowId: escrowId.toString(),
+          auctionId: auctionId.toString(),
+          buyer,
+          seller,
+          amount: ethers.formatUnits(amount, this.tokenDecimals)
+        });
+        this.handleEscrowCreated(escrowId, auctionId, buyer, seller, amount, event);
+      });
+
+      this.wsContracts.escrow.on('EscrowCompleted', (escrowId, amount, event) => {
+        logger.blockchain('escrow_completed', {
+          escrowId: escrowId.toString(),
+          amount: ethers.formatUnits(amount, this.tokenDecimals)
+        });
+        this.handleEscrowCompleted(escrowId, amount, event);
+      });
+
+      this.wsContracts.escrow.on('DisputeRaised', (escrowId, reason, raisedBy, event) => {
+        logger.blockchain('dispute_raised', {
+          escrowId: escrowId.toString(),
+          reason,
+          raisedBy
+        });
+        this.handleDisputeRaised(escrowId, reason, raisedBy, event);
+      });
+    }
+
+    // ✅ Correct way in v6: listen to provider events
+    this.wsProvider.on("block", (blockNumber) => {
+      logger.info(`New block: ${blockNumber}`);
+    });
+
+    this.wsProvider.on("error", (err) => {
+      logger.error("WebSocket provider error:", err);
+      this.isListening = false;
+      setTimeout(() => this.reconnectWebSocket(), 5000);
+    });
+
+    this.isListening = true;
+    logger.info('WebSocket event listeners set up successfully');
+  } catch (error) {
+    logger.error('Error setting up event listeners:', error);
   }
-  
+}
+
   // Reconnection logic for WebSocket
   async reconnectWebSocket() {
     if (this.isListening) return;
