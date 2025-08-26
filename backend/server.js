@@ -1,5 +1,5 @@
+// server.js
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -13,6 +13,7 @@ require('dotenv').config();
 const logger = require('./utils/logger');
 const redisClient = require('./config/redis');
 const { errorHandler } = require('./middleware/errorHandler');
+const connectDB = require('./config/db'); // <-- use db.js instead of duplicating
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -70,11 +71,8 @@ app.use(
 );
 
 app.use(compression());
-
-// Apply rate limiting to API routes
 app.use('/api/', apiLimiter);
 
-// CORS configuration
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -82,7 +80,6 @@ app.use(
   })
 );
 
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -95,38 +92,19 @@ app.use(
   })
 );
 
-// Database connection with longer timeouts
-mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 60000, // 60 seconds
-    socketTimeoutMS: 45000, // 45 seconds
-    connectTimeoutMS: 60000, // 60 seconds
-  })
-  .then(() => {
-    logger.info('Connected to MongoDB');
-  })
-  .catch((error) => {
-    logger.error('MongoDB connection error:', error);
-    // Don't exit immediately - let the server start but log the error
-    // process.exit(1);
-  });
+// ✅ Connect DB (from db.js)
+connectDB();
 
-// Redis connection with better error handling
+// Redis connection
 redisClient.on('connect', () => {
   logger.info('Connected to Redis');
 });
-
 redisClient.on('error', (error) => {
   logger.error('Redis connection error (non-fatal):', error.message);
-  // Don't crash the app on Redis errors
 });
 
 // Socket.IO setup
 webSocketController.initialize(io);
-
-// Initialize real-time features
 realTimeController.initialize();
 
 // Health check endpoint
@@ -137,8 +115,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: process.env.API_VERSION || 'v1',
     services: {
-      database:
-        mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      database: 'connected', // handled by db.js events
       redis: redisClient.isReady ? 'connected' : 'disconnected',
       websocket: 'active',
       blockchain: 'listening',
@@ -164,32 +141,24 @@ app.use(`/api/${apiVersion}/security`, securityRoutes);
 app.use(`/api/${apiVersion}/admin`, adminRoutes);
 app.use(`/api/${apiVersion}/webhooks`, webhookRoutes);
 
-// Custom static file serving (safe version that works with Babel)
+// Static uploads
 app.use('/uploads', (req, res, next) => {
   const filePath = path.join(uploadsDir, req.path);
-
   fs.stat(filePath, (err, stats) => {
-    if (err || !stats.isFile()) {
-      return next(); // File doesn't exist, continue to next middleware
-    }
-
+    if (err || !stats.isFile()) return next();
     res.sendFile(filePath);
   });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-    data: null,
-  });
+  res.status(404).json({ success: false, message: 'Route not found', data: null });
 });
 
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize blockchain event listening
+// Blockchain events
 if (process.env.NODE_ENV !== 'test') {
   blockchainEventController.initialize().catch((error) => {
     logger.error('Failed to initialize blockchain event controller:', error);
@@ -197,57 +166,23 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-
-  if (blockchainEventController.stopEventListening) {
-    blockchainEventController.stopEventListening();
-  }
-
-  if (require('./services/web3Service').cleanup) {
-    require('./services/web3Service').cleanup();
-  }
-
-  if (realTimeController.stop) {
-    realTimeController.stop();
-  }
+const shutdown = (signal) => {
+  logger.info(`${signal} received, shutting down gracefully`);
+  if (blockchainEventController.stopEventListening) blockchainEventController.stopEventListening();
+  if (require('./services/web3Service').cleanup) require('./services/web3Service').cleanup();
+  if (realTimeController.stop) realTimeController.stop();
 
   server.close(() => {
-    mongoose.connection.close();
     redisClient.quit();
     process.exit(0);
   });
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-
-  if (blockchainEventController.stopEventListening) {
-    blockchainEventController.stopEventListening();
-  }
-
-  if (require('./services/web3Service').cleanup) {
-    require('./services/web3Service').cleanup();
-  }
-
-  if (realTimeController.stop) {
-    realTimeController.stop();
-  }
-
-  server.close(() => {
-    mongoose.connection.close();
-    redisClient.quit();
-    process.exit(0);
-  });
-});
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  logger.info(
-    `Server running on port ${PORT} in ${
-      process.env.NODE_ENV || 'development'
-    } mode`
-  );
+  logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
 
 module.exports = { app, server, io };
