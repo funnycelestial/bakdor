@@ -366,3 +366,127 @@ X-Anonymous-ID: {anonymous_identifier}
 3. Cache frequently accessed data in Redis
 4. Optimize smart contract gas usage
 5. Implement rate limiting on all endpoints
+
+Got it ✅ — we’ll keep **Trust Me Bros (TMB)** and **Staking** as **two separate parameters**, each required at different levels depending on auction value.
+
+Here’s a polished documentation you can drop into your platform docs:
+
+---
+
+# 🏛️ Trust & Staking System
+
+To ensure legitimacy, fairness, and security across all auctions and reverse auctions, the platform implements a **two-parameter trust system**:
+
+1. **Trust Me Bros (TMBs)** – reputation score earned through activity and reliability.
+2. **Staking** – financial commitment that grows with auction value.
+
+This system eliminates reliance on government-issued IDs while providing scalable safeguards against fraud and abuse.
+
+---
+
+## 1. Trust Me Bros (TMBs)
+
+### 📌 Definition
+
+TMBs are a **reputation metric** representing a user’s trustworthiness. Each user has a TMB score that increases or decreases based on their history and behavior on the platform.
+
+### 📈 Earning TMBs
+
+Users earn TMBs through:
+
+* Successful auction completions.
+* Positive buyer/seller feedback.
+* On-chain history & staking consistency.
+* Engagement (participation in smaller auctions, community interaction).
+* Reliability (meeting deadlines, honoring bids).
+
+### ⚠️ Losing TMBs
+
+TMBs decrease when:
+
+* Auctions are abandoned or defaulted.
+* Fraudulent activity or disputes are confirmed.
+* Repeated community downvotes or low reliability reports.
+
+---
+
+## 2. Staking
+
+### 📌 Definition
+
+Staking requires users to lock up tokens proportional to the value of the auctions they participate in. Staking ensures users have **skin in the game**.
+
+### ⚖️ Slashing (Penalties)
+
+If a user acts maliciously or defaults, their stake is slashed.
+
+* **Penalty Amount:**
+
+  $$
+  Slash = \min(\text{Staked Amount}, \; \alpha \cdot \text{Auction Value})
+  $$
+
+  where $\alpha$ = penalty factor (e.g. 10–100%).
+
+* TMB penalty is applied alongside stake loss for higher deterrence.
+
+---
+
+## 3. Scaling Requirements
+
+Both TMBs and staking requirements **scale with auction value**. This prevents low-effort fraud in small auctions while ensuring serious users are well-vetted in larger ones.
+
+### 📊 Formulas
+
+* **TMB requirement:**
+
+  $$
+  TMBᵣ = T₀ + k₁ \cdot \log_{10}(A)
+  $$
+
+* **Stake requirement:**
+
+  $$
+  Sᵣ = S₀ \cdot (1 + k₂ \cdot \log_{10}(A))
+  $$
+
+Where:
+
+* $A$ = Auction value (USD or token equivalent)
+* $T₀$ = Base TMB requirement (e.g. 10)
+* $S₀$ = Base stake requirement (e.g. \$10)
+* $k₁, k₂$ = scaling constants
+
+### Example Table
+
+| Auction Value (A) | TMB Required | Stake Required |
+| ----------------- | ------------ | -------------- |
+| \$100             | 60 TMB       | \$15           |
+| \$1,000           | 110 TMB      | \$25           |
+| \$5,000           | 160 TMB      | \$35           |
+| \$20,000          | 210 TMB      | \$45           |
+| \$100,000         | 260 TMB      | \$60           |
+| \$1,000,000       | 310 TMB      | \$85           |
+
+---
+
+## 4. Participation Rules
+
+* **Small auctions (low A):** Users may qualify with **either** TMBs or staking.
+* **Medium auctions:** Users must meet **both** TMB and staking thresholds.
+* **Large auctions (high A):** Strict requirements; both TMB and stake required, penalties scaled up.
+
+---
+
+## 5. Summary
+
+* **No IDs required** → privacy-preserving trust model.
+* **TMBs = reputation capital** → grows over time through honest participation.
+* **Staking = financial skin** → ensures users have something to lose.
+* **Dynamic scaling** → small auctions remain open & accessible, high-value auctions are strongly protected.
+
+Together, TMBs and staking create a **self-regulating ecosystem** where trust is earned, preserved, and enforced without centralized identity verification.
+
+---
+
+Do you want me to also add a **visual diagram (flow or tier graph)** to this documentation so it’s easier to present to stakeholders and devs?
