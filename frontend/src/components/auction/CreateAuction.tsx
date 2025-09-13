@@ -24,6 +24,7 @@ export const CreateAuction = () => {
     condition: 'good',
     brand: '',
     model: '',
+    year: '',
     shippingMethod: 'standard',
     shippingCost: '0'
   });
@@ -93,24 +94,35 @@ export const CreateAuction = () => {
 
     setIsCreating(true);
     try {
-      const response = await apiService.createAuction({
-        ...auctionData,
+      const payload = {
+        title: auctionData.title.trim(),
+        description: auctionData.description.trim(),
+        category: auctionData.category,
+        type: auctionData.type,
         startingBid: parseFloat(auctionData.startingBid),
         reservePrice: auctionData.reservePrice ? parseFloat(auctionData.reservePrice) : 0,
         buyNowPrice: auctionData.buyNowPrice ? parseFloat(auctionData.buyNowPrice) : 0,
         duration: parseInt(auctionData.duration),
-        shippingCost: parseFloat(auctionData.shippingCost)
-      });
+        condition: auctionData.condition,
+        brand: auctionData.brand.trim(),
+        model: auctionData.model.trim(),
+        year: auctionData.year ? parseInt(auctionData.year) : undefined,
+        shippingMethod: auctionData.shippingMethod,
+        shippingCost: parseFloat(auctionData.shippingCost),
+        images: []
+      };
+
+      const response = await apiService.createAuction(payload);
 
       toast.success('Auction created successfully!', {
-        description: `Auction ID: ${response.data.auction.auctionId}`
+        description: `Auction ID: ${response.data.auctionId}`
       });
 
       // Reset form
       setAuctionData({
         title: '',
         description: '',
-        category: '',
+        category: 'electronics',
         type: 'forward',
         startingBid: '',
         reservePrice: '',
@@ -119,6 +131,7 @@ export const CreateAuction = () => {
         condition: 'good',
         brand: '',
         model: '',
+        year: '',
         shippingMethod: 'standard',
         shippingCost: '0'
       });
@@ -358,7 +371,7 @@ export const CreateAuction = () => {
           {isCreating ? (
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin"></div>
-              Creating on Blockchain...
+              Creating Auction...
             </div>
           ) : (
             'Create Auction'
@@ -366,7 +379,7 @@ export const CreateAuction = () => {
         </Button>
 
         <div className="text-xs text-muted-foreground text-center">
-          Your auction will be deployed to the blockchain and pending admin approval
+          Your auction will be pending admin approval before going live
         </div>
       </div>
     </Card>

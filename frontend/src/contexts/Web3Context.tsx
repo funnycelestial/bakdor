@@ -24,6 +24,7 @@ interface Web3ContextType {
   disconnectWallet: () => void;
   refreshBalance: () => Promise<void>;
   refreshTokenInfo: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const Web3Context = createContext<Web3ContextType | null>(null);
@@ -50,12 +51,6 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [balance, setBalance] = useState('0');
 
-  // Format token amount utility function
-  const formatTokenAmount = (amt: string): string => {
-    const num = parseFloat(amt);
-    return num >= 1000 ? `${(num/1000).toFixed(1)}K` : num.toFixed(2);
-  };
-
   // Check for existing connection on mount
   useEffect(() => {
     checkExistingConnection();
@@ -68,14 +63,17 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       window.ethereum.on('chainChanged', handleChainChanged);
       
       return () => {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+        if (window.ethereum.removeListener) {
+          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
+        }
       };
     }
   }, []);
 
   const checkExistingConnection = async () => {
     try {
+      // Check if wallet is already connected
       if (typeof window !== 'undefined' && window.ethereum) {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         if (accounts.length > 0) {
@@ -88,40 +86,9 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
           const token = apiService.getAuthToken();
           if (token) {
             try {
-              const response = await apiService.getProfile();
-              setUser(response.data.user);
-              setIsAuthenticated(true);
-              
-              // Connect WebSocket
-              apiService.connectSocket(token);
-              
-              // Setup blockchain event listeners
-              web3Service.setupEventListeners({
-                onBidPlaced: (auctionId, bidder, amount) => {
-                  console.log(`Bid placed: ${amount} WKC on auction ${auctionId}`);
-                },
-                onAuctionEnded: (auctionId, winner, winningBid) => {
-                  console.log(`Auction ${auctionId} ended. Winner: ${winner}, Amount: ${winningBid} WKC`);
-                },
-                onTokensBurned: (amount, reason) => {
-                  console.log(`Tokens burned: ${amount} WKC. Reason: ${reason}`);
-                  toast.success(`🔥 ${formatTokenAmount(amount)} WKC burned!`);
-                },
-                onEscrowCreated: (escrowId, auctionId, amount) => {
-                  console.log(`Escrow created: ${escrowId} for ${amount} WKC`);
-                },
-                onEscrowCompleted: (escrowId, amount) => {
-                  console.log(`Escrow completed: ${escrowId}, ${amount} WKC released`);
-                }
-              });
-              
-              // Load initial data
-              await Promise.all([
-                refreshBalance(),
-                refreshTokenInfo()
-              ]);
+              await authenticateUser(connection.address);
             } catch (error) {
-              console.error('Failed to load user profile:', error);
+              console.error('Failed to authenticate with existing token:', error);
               apiService.clearAuthToken();
             }
           }
@@ -143,8 +110,58 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 
   const handleChainChanged = (chainId: string) => {
     setChainId(parseInt(chainId, 16));
-    // Optionally reload or show network change notification
     toast.info('Network changed. Please refresh if you experience issues.');
+  };
+
+  const authenticateUser = async (address: string) => {
+    try {
+      // First, try to get nonce for signing
+      const nonceResponse = await apiService.login(address);
+      
+      if (nonceResponse.step === 'sign') {
+        // Need to sign the message
+        const signature = await web3Service.signMessage(nonceResponse.message);
+        
+        // Send signature for verification
+        const authResponse = await apiService.login(address, signature);
+        
+        if (authResponse.step === 'verified') {
+          setUser(authResponse.user);
+          setIsAuthenticated(true);
+          apiService.setAuthToken(authResponse.token);
+          
+          // Connect WebSocket
+          apiService.connectSocket(authResponse.token);
+          
+          // Load initial data
+          await Promise.all([
+            refreshBalance(),
+            refreshTokenInfo()
+          ]);
+          
+          toast.success(`Welcome, ${authResponse.user.anonymousId}!`);
+          return authResponse.user;
+        }
+      } else if (nonceResponse.user) {
+        // Already authenticated
+        setUser(nonceResponse.user);
+        setIsAuthenticated(true);
+        apiService.setAuthToken(nonceResponse.token);
+        
+        // Connect WebSocket
+        apiService.connectSocket(nonceResponse.token);
+        
+        await Promise.all([
+          refreshBalance(),
+          refreshTokenInfo()
+        ]);
+        
+        return nonceResponse.user;
+      }
+    } catch (error) {
+      console.error('Authentication failed:', error);
+      throw error;
+    }
   };
 
   const connectWallet = async () => {
@@ -159,63 +176,9 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setChainId(connection.chainId);
       setIsConnected(true);
       
-      // Generate authentication message
-      const message = `Welcome to Anonymous Auction Platform!\n\nSign this message to authenticate your wallet.\n\nWallet: ${connection.address}\nTimestamp: ${Date.now()}`;
+      // Authenticate with backend
+      await authenticateUser(connection.address);
       
-      // Sign message for authentication
-      const signature = await web3Service.signMessage(message);
-      
-      // Check if user exists, if not register
-      try {
-        const loginResponse = await apiService.login(connection.address, signature, message);
-        setUser(loginResponse.data.user);
-        setIsAuthenticated(true);
-        apiService.setAuthToken(loginResponse.data.token);
-        toast.success(`Welcome back, ${loginResponse.data.user.anonymousId}!`);
-      } catch (loginError: any) {
-        if (loginError.message.includes('User not found')) {
-          // Register new user
-          const registerResponse = await apiService.register(connection.address, signature, message);
-          setUser(registerResponse.data.user);
-          setIsAuthenticated(true);
-          apiService.setAuthToken(registerResponse.data.token);
-          toast.success(`Welcome to the platform, ${registerResponse.data.user.anonymousId}!`);
-        } else {
-          throw loginError;
-        }
-      }
-      
-      // Connect WebSocket for real-time updates
-      const token = apiService.getAuthToken();
-      if (token) {
-        apiService.connectSocket(token);
-        
-        // Setup blockchain event listeners
-        web3Service.setupEventListeners({
-          onBidPlaced: (auctionId, bidder, amount) => {
-            console.log(`Bid placed: ${amount} WKC on auction ${auctionId}`);
-          },
-          onAuctionEnded: (auctionId, winner, winningBid) => {
-            console.log(`Auction ${auctionId} ended. Winner: ${winner}, Amount: ${winningBid} WKC`);
-          },
-          onTokensBurned: (amount, reason) => {
-            console.log(`Tokens burned: ${amount} WKC. Reason: ${reason}`);
-            toast.success(`🔥 ${formatTokenAmount(amount)} WKC burned!`);
-          },
-          onEscrowCreated: (escrowId, auctionId, amount) => {
-            console.log(`Escrow created: ${escrowId} for ${amount} WKC`);
-          },
-          onEscrowCompleted: (escrowId, amount) => {
-            console.log(`Escrow completed: ${escrowId}, ${amount} WKC released`);
-          }
-        });
-      }
-      
-      // Load initial data
-      await Promise.all([
-        refreshBalance(),
-        refreshTokenInfo()
-      ]);
     } catch (error: any) {
       console.error('Wallet connection failed:', error);
       toast.error(error.message || 'Failed to connect wallet');
@@ -242,13 +205,21 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   };
 
   const refreshBalance = async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || !isAuthenticated) return;
     
     try {
-      const balance = await web3Service.getTokenBalance(walletAddress);
-      setBalance(balance);
+      // Get balance from backend (which syncs with blockchain)
+      const response = await apiService.refreshBalance();
+      setBalance(response.balance.available.toString());
     } catch (error) {
       console.error('Failed to refresh balance:', error);
+      // Fallback to direct blockchain call
+      try {
+        const blockchainBalance = await web3Service.getTokenBalance(walletAddress);
+        setBalance(blockchainBalance);
+      } catch (blockchainError) {
+        console.error('Failed to get blockchain balance:', error);
+      }
     }
   };
 
@@ -258,6 +229,27 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setTokenInfo(info);
     } catch (error) {
       console.error('Failed to refresh token info:', error);
+      // Use mock data as fallback
+      setTokenInfo({
+        name: 'WikiCat Token',
+        symbol: 'WKC',
+        decimals: 18,
+        totalSupply: '1000000000',
+        totalBurned: '125000',
+        circulatingSupply: '874875000',
+        burnRate: 2.34
+      });
+    }
+  };
+
+  const refreshUser = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      const response = await apiService.getProfile();
+      setUser(response.data.user);
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
     }
   };
 
@@ -274,6 +266,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     disconnectWallet,
     refreshBalance,
     refreshTokenInfo,
+    refreshUser,
   };
 
   return (

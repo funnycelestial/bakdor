@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiService, Auction, Bid } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
@@ -24,18 +23,15 @@ export const MyAuctions = () => {
 
   const loadMyData = async () => {
     try {
-      const [auctionsResponse, bidsResponse] = await Promise.all([
-        apiService.getAuctions({ seller: user?.id, limit: 50 }),
-        apiService.getMyBids({ limit: 50 })
+      const [auctionsResponse, bidsResponse, wonResponse] = await Promise.all([
+        apiService.getMyAuctions({ limit: 50 }),
+        apiService.getMyBids({ limit: 50 }),
+        apiService.getWonAuctions()
       ]);
 
-      setMyAuctions(auctionsResponse.data.auctions);
-      setMyBids(bidsResponse.data.bids);
-      
-      // Filter won auctions from bids
-      const wonBids = bidsResponse.data.bids.filter(bid => bid.status === 'won');
-      // In a real implementation, you'd fetch the full auction details for won items
-      setWonAuctions([]);
+      setMyAuctions(auctionsResponse.data.auctions || []);
+      setMyBids(bidsResponse.data.bids || []);
+      setWonAuctions(wonResponse.data.auctions || []);
       
     } catch (error) {
       console.error('Failed to load user data:', error);
@@ -48,7 +44,7 @@ export const MyAuctions = () => {
   const handleCloseAuction = async (auctionId: string) => {
     setActionLoading(auctionId);
     try {
-      await apiService.request(`/auctions/${auctionId}/close`, { method: 'POST' });
+      await apiService.closeAuction(auctionId, true);
       await loadMyData();
       toast.success('Auction closed successfully');
     } catch (error: any) {
@@ -59,15 +55,15 @@ export const MyAuctions = () => {
     }
   };
 
-  const handleWithdrawBid = async (bidId: string) => {
+  const handleRetractBid = async (bidId: string) => {
     setActionLoading(bidId);
     try {
-      await apiService.request(`/bids/${bidId}`, { method: 'DELETE' });
+      await apiService.retractBid(bidId);
       await loadMyData();
-      toast.success('Bid withdrawn successfully');
+      toast.success('Bid retracted successfully');
     } catch (error: any) {
-      console.error('Failed to withdraw bid:', error);
-      toast.error(error.message || 'Failed to withdraw bid');
+      console.error('Failed to retract bid:', error);
+      toast.error(error.message || 'Failed to retract bid');
     } finally {
       setActionLoading(null);
     }
@@ -84,6 +80,26 @@ export const MyAuctions = () => {
       case 'won': return 'bg-green-500/20 text-green-400';
       case 'lost': return 'bg-muted text-muted-foreground';
       default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const formatTimeRemaining = (endTime: string): string => {
+    const now = Date.now();
+    const end = new Date(endTime).getTime();
+    const remaining = end - now;
+    
+    if (remaining <= 0) return 'Ended';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
     }
   };
 
@@ -159,7 +175,7 @@ export const MyAuctions = () => {
                     <div className="text-muted-foreground">Time Remaining:</div>
                     <div className="text-terminal-red">
                       {auction.status === 'active' 
-                        ? formatTimeRemaining(Math.floor(new Date(auction.timing.endTime).getTime() / 1000))
+                        ? formatTimeRemaining(auction.timing.endTime)
                         : 'Ended'
                       }
                     </div>
@@ -215,7 +231,7 @@ export const MyAuctions = () => {
                   <div>
                     <div className="text-muted-foreground">Placed:</div>
                     <div className="text-foreground">
-                      {new Date(bid.placedAt).toLocaleDateString()}
+                      {new Date(bid.timing.placedAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div>
@@ -225,7 +241,7 @@ export const MyAuctions = () => {
                   <div>
                     <div className="text-muted-foreground">End Time:</div>
                     <div className="text-terminal-red">
-                      {formatTimeRemaining(Math.floor(new Date(bid.auction.endTime).getTime() / 1000))}
+                      {formatTimeRemaining(bid.auction.endTime)}
                     </div>
                   </div>
                 </div>
@@ -236,11 +252,11 @@ export const MyAuctions = () => {
                   </button>
                   {(bid.status === 'active' || bid.status === 'outbid') && bid.auction.status === 'active' && (
                     <button 
-                      onClick={() => handleWithdrawBid(bid.bidId)}
+                      onClick={() => handleRetractBid(bid.bidId)}
                       disabled={actionLoading === bid.bidId}
                       className="bg-terminal-red/20 hover:bg-terminal-red/30 px-2 py-1 text-xs text-terminal-red transition-colors disabled:opacity-50"
                     >
-                      {actionLoading === bid.bidId ? 'Withdrawing...' : 'Withdraw Bid'}
+                      {actionLoading === bid.bidId ? 'Retracting...' : 'Retract Bid'}
                     </button>
                   )}
                 </div>

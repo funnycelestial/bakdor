@@ -15,7 +15,12 @@ export interface User {
     successRate: number;
     memberSince: string;
     isVerified: boolean;
-    verificationLevel: string;
+    trustMeBros: number;
+  };
+  balance: {
+    total: number;
+    available: number;
+    locked: number;
   };
   status: string;
   createdAt: string;
@@ -67,10 +72,13 @@ export interface Bid {
     title: string;
     status: string;
     endTime: string;
+    auctionRef: string;
   };
   amount: number;
   status: string;
-  placedAt: string;
+  timing: {
+    placedAt: string;
+  };
 }
 
 export interface EscrowTransaction {
@@ -121,7 +129,12 @@ export interface Notification {
   message: string;
   priority: string;
   data?: any;
-  isRead: boolean;
+  channels: {
+    inApp: {
+      read: boolean;
+      readAt?: string;
+    };
+  };
   createdAt: string;
 }
 
@@ -173,42 +186,58 @@ class ApiService {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Request failed');
+      throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
     }
 
     return data;
   }
 
-  // Authentication
-  async register(walletAddress: string, signature: string, message: string, email?: string) {
-    return this.request('/auth/register', {
+  // Authentication - matches backend endpoints
+  async login(walletAddress: string, signature?: string) {
+    const body: any = { walletAddress };
+    if (signature) {
+      body.signature = signature;
+    }
+    
+    return this.request('/users/login', {
       method: 'POST',
-      body: JSON.stringify({ walletAddress, signature, message, email }),
-    });
-  }
-
-  async login(walletAddress: string, signature: string, message: string, twoFactorToken?: string) {
-    return this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ walletAddress, signature, message, twoFactorToken }),
+      body: JSON.stringify(body),
     });
   }
 
   async getProfile() {
-    return this.request('/auth/profile');
+    return this.request('/users/me');
   }
 
   async updateProfile(profileData: any) {
-    return this.request('/auth/profile', {
+    return this.request('/users/me', {
       method: 'PUT',
       body: JSON.stringify(profileData),
     });
   }
 
-  // Auctions
+  async refreshBalance() {
+    return this.request('/users/balance/refresh', {
+      method: 'PUT',
+    });
+  }
+
+  async getUserDashboard() {
+    return this.request('/users/dashboard');
+  }
+
+  async getUserWatchlist() {
+    return this.request('/users/watchlist');
+  }
+
+  async getUserActivity() {
+    return this.request('/users/activities');
+  }
+
+  // Auctions - matches backend routes
   async getAuctions(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/auctions?${queryString}`);
+    return this.request(`/auctions${queryString ? `?${queryString}` : ''}`);
   }
 
   async getAuction(id: string) {
@@ -216,7 +245,7 @@ class ApiService {
   }
 
   async createAuction(auctionData: any) {
-    return this.request('/auctions', {
+    return this.request('/auctions/create', {
       method: 'POST',
       body: JSON.stringify(auctionData),
     });
@@ -235,18 +264,17 @@ class ApiService {
     });
   }
 
-  async searchAuctions(query: string, filters: any = {}) {
-    const params = { q: query, ...filters };
+  async getMyAuctions(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/auctions/search?${queryString}`);
+    return this.request(`/auctions/my${queryString ? `?${queryString}` : ''}`);
   }
 
-  async getAuctionCategories() {
-    return this.request('/auctions/categories');
+  async getSellerAuctions(sellerId: string) {
+    return this.request(`/auctions/seller/${sellerId}`);
   }
 
-  async getFeaturedAuctions() {
-    return this.request('/auctions/featured');
+  async getWonAuctions() {
+    return this.request('/auctions/won');
   }
 
   async watchAuction(auctionId: string) {
@@ -261,48 +289,96 @@ class ApiService {
     });
   }
 
-  // Bidding
-  async placeBid(auctionId: string, amount: number) {
-    return this.request(`/auctions/${auctionId}/bids`, {
+  async closeAuction(auctionId: string, forceClose: boolean = false) {
+    return this.request(`/auctions/${auctionId}/close`, {
       method: 'POST',
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ forceClose }),
     });
   }
 
-  // Market data
-  async getMarketOverview() {
-    return this.request('/market/overview');
+  async confirmReceipt(auctionId: string) {
+    return this.request(`/auctions/${auctionId}/receipt`, {
+      method: 'POST',
+    });
   }
 
-  async getTrendingAuctions() {
-    return this.request('/market/trending');
+  async updateDeliveryInfo(auctionId: string, deliveryData: any) {
+    return this.request(`/auctions/${auctionId}/delivery`, {
+      method: 'PUT',
+      body: JSON.stringify(deliveryData),
+    });
   }
 
-  async getEndingSoonAuctions(hours: number = 1) {
-    return this.request(`/market/ending-soon?hours=${hours}`);
+  // Bidding - matches backend routes
+  async placeBid(auctionId: string, amount: number, isAutoBid: boolean = false) {
+    return this.request(`/bids/auction/${auctionId}`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, isAutoBid }),
+    });
   }
 
-  // User dashboard
-  async getUserDashboard() {
-    return this.request('/users/dashboard');
+  async getAuctionBids(auctionId: string, limit: number = 20) {
+    return this.request(`/bids/auction/${auctionId}?limit=${limit}`);
   }
 
-  async getUserWatchlist() {
-    return this.request('/users/watchlist');
-  }
   async getMyBids(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/bids/my-bids?${queryString}`);
+    return this.request(`/bids/user/my-bids${queryString ? `?${queryString}` : ''}`);
   }
 
-  async withdrawBid(bidId: string) {
-    return this.request(`/bids/${bidId}`, {
-      method: 'DELETE',
+  async getHighestBid(auctionId: string) {
+    return this.request(`/bids/auction/${auctionId}/highest`);
+  }
+
+  async getBidCount(auctionId: string) {
+    return this.request(`/bids/auction/${auctionId}/count`);
+  }
+
+  async retractBid(bidId: string) {
+    return this.request(`/bids/${bidId}/retract`, {
+      method: 'POST',
     });
   }
 
   async getBidStatus(bidId: string) {
     return this.request(`/bids/${bidId}/status`);
+  }
+
+  // Market data
+  async getMarketOverview() {
+    return this.request('/overview');
+  }
+
+  async getLiveAuctions(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/market/live${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getTrendingAuctions(limit: number = 20) {
+    return this.request(`/market/trending?limit=${limit}`);
+  }
+
+  async getEndingSoonAuctions(hours: number = 1, limit: number = 20) {
+    return this.request(`/market/ending-soon?hours=${hours}&limit=${limit}`);
+  }
+
+  async getFeaturedAuctions(limit: number = 10) {
+    return this.request(`/market/featured?limit=${limit}`);
+  }
+
+  async getReverseAuctions(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/market/reverse${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async searchAuctions(query: string, filters: any = {}) {
+    const params = { q: query, ...filters };
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/market/search?${queryString}`);
+  }
+
+  async getAuctionCategories() {
+    return this.request('/market/categories');
   }
 
   // Wallet & Tokens
@@ -312,20 +388,20 @@ class ApiService {
 
   async getTransactionHistory(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/wallet/transactions?${queryString}`);
+    return this.request(`/wallet/transactions${queryString ? `?${queryString}` : ''}`);
   }
 
-  async depositTokens(amount: number, paymentMethod: string, phoneNumber?: string) {
+  async depositTokens(amount: number, transactionHash: string) {
     return this.request('/wallet/deposit', {
       method: 'POST',
-      body: JSON.stringify({ amount, paymentMethod, phoneNumber }),
+      body: JSON.stringify({ amount, transactionHash }),
     });
   }
 
-  async withdrawTokens(amount: number, paymentMethod: string, phoneNumber?: string) {
+  async withdrawTokens(amount: number, recipientAddress: string) {
     return this.request('/wallet/withdraw', {
       method: 'POST',
-      body: JSON.stringify({ amount, paymentMethod, phoneNumber }),
+      body: JSON.stringify({ amount, recipientAddress }),
     });
   }
 
@@ -344,31 +420,14 @@ class ApiService {
     return this.request(`/tokens/burn-stats?period=${period}`);
   }
 
-  // Payments
   async getPaymentMethods() {
-    return this.request('/payments/methods');
-  }
-
-  async processPayment(amount: number, paymentMethod: string, type: string, phoneNumber?: string) {
-    return this.request('/payments/process', {
-      method: 'POST',
-      body: JSON.stringify({ amount, paymentMethod, type, phoneNumber }),
-    });
-  }
-
-  async getPaymentStatus(transactionId: string) {
-    return this.request(`/payments/${transactionId}/status`);
-  }
-
-  async getPaymentHistory(params: any = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    return this.request(`/payments/history?${queryString}`);
+    return this.request('/wallet/payment-methods');
   }
 
   // Escrow
   async getEscrowTransactions(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/escrow/transactions?${queryString}`);
+    return this.request(`/escrow/transactions${queryString ? `?${queryString}` : ''}`);
   }
 
   async getEscrowDetails(escrowId: string) {
@@ -399,7 +458,7 @@ class ApiService {
   // Disputes
   async getDisputes(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/disputes?${queryString}`);
+    return this.request(`/disputes${queryString ? `?${queryString}` : ''}`);
   }
 
   async getDisputeDetails(disputeId: string) {
@@ -416,7 +475,7 @@ class ApiService {
   // Notifications
   async getNotifications(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/notifications?${queryString}`);
+    return this.request(`/notifications${queryString ? `?${queryString}` : ''}`);
   }
 
   async markNotificationRead(notificationId: string) {
@@ -445,7 +504,7 @@ class ApiService {
 
   async getSecurityEvents(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/security/events?${queryString}`);
+    return this.request(`/security/events${queryString ? `?${queryString}` : ''}`);
   }
 
   // Admin
@@ -458,21 +517,21 @@ class ApiService {
   }
 
   async approveAuction(auctionId: string, notes?: string) {
-    return this.request(`/admin/auctions/${auctionId}/approve`, {
+    return this.request(`/admin/approve-auction/${auctionId}`, {
       method: 'POST',
       body: JSON.stringify({ notes }),
     });
   }
 
   async rejectAuction(auctionId: string, reason: string) {
-    return this.request(`/admin/auctions/${auctionId}/reject`, {
+    return this.request(`/admin/reject-auction/${auctionId}`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
   }
 
   // WebSocket Management
-  connectSocket(token: string) {
+  connectSocket(token: string): Socket {
     if (this.socket?.connected) {
       this.socket.disconnect();
     }
@@ -480,18 +539,21 @@ class ApiService {
     this.socket = io(WS_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     this.socket.on('connect', () => {
       console.log('Connected to WebSocket server');
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Disconnected from WebSocket server');
+    this.socket.on('disconnect', (reason) => {
+      console.log('Disconnected from WebSocket server:', reason);
     });
 
-    this.socket.on('error', (error) => {
-      console.error('WebSocket error:', error);
+    this.socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
     });
 
     return this.socket;
@@ -510,32 +572,32 @@ class ApiService {
 
   // Socket room management
   joinAuctionRoom(auctionId: string) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit('join_auction', auctionId);
     }
   }
 
   leaveAuctionRoom(auctionId: string) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit('leave_auction', auctionId);
     }
   }
 
   // Real-time auction actions
   placeBidRealTime(auctionId: string, amount: number) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit('place_bid', { auctionId, amount });
     }
   }
 
   watchAuctionRealTime(auctionId: string) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit('watch_auction', auctionId);
     }
   }
 
   unwatchAuctionRealTime(auctionId: string) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit('unwatch_auction', auctionId);
     }
   }

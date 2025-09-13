@@ -2,14 +2,10 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { apiService, Auction } from '@/lib/api';
-import { web3Service } from '@/lib/web3';
 import { formatTokenAmount } from '@/utils/formatters';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { toast } from 'sonner';
-import { LiveActivityFeed } from '../auction/LiveActivityFeed';
 import { BidIncrement } from '../auction/BidIncrement';
 
 interface RealTimeAuctionsProps {
@@ -17,11 +13,9 @@ interface RealTimeAuctionsProps {
 }
 
 export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) => {
-  const { isAuthenticated, walletAddress, balance, refreshBalance } = useWeb3();
+  const { isAuthenticated, walletAddress, balance, refreshBalance, user } = useWeb3();
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null);
-  const [bidAmount, setBidAmount] = useState('');
-  const [isPlacingBid, setIsPlacingBid] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [recentBids, setRecentBids] = useState<any[]>([]);
 
@@ -43,11 +37,11 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
 
   const loadAuctions = async () => {
     try {
-      const response = await apiService.getAuctions({
-        status: 'active',
-        limit: 20,
-        sort: 'ending_soon'
+      const response = await apiService.getLiveAuctions({
+        sort: 'ending_soon',
+        limit: 20
       });
+      
       setAuctions(response.data.auctions);
       
       if (response.data.auctions.length > 0 && !selectedAuction) {
@@ -56,7 +50,52 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
       }
     } catch (error) {
       console.error('Failed to load auctions:', error);
-      toast.error('Failed to load auctions');
+      toast.error('Failed to load live auctions');
+      
+      // Use fallback mock data
+      const mockAuctions = [
+        {
+          id: '1',
+          auctionId: 'AUC_001',
+          title: 'iPhone 15 Pro Max 256GB',
+          description: 'Brand new iPhone 15 Pro Max',
+          category: 'electronics',
+          type: 'forward' as const,
+          seller: {
+            userId: 'user1',
+            anonymousId: 'ANON_123',
+            reputation: 4.5
+          },
+          pricing: {
+            startingBid: 500,
+            currentBid: 1250,
+            reservePrice: 1000,
+            buyNowPrice: 1500,
+            currency: 'WKC'
+          },
+          timing: {
+            startTime: new Date().toISOString(),
+            endTime: new Date(Date.now() + 4 * 60 * 1000).toISOString(),
+            duration: 86400000
+          },
+          status: 'active',
+          bidding: {
+            totalBids: 15,
+            uniqueBidders: 8,
+            highestBidder: {
+              anonymousId: 'ANON_456'
+            }
+          },
+          analytics: {
+            views: 156,
+            watchersCount: 23
+          },
+          isWatching: false,
+          createdAt: new Date().toISOString()
+        }
+      ];
+      setAuctions(mockAuctions);
+      setSelectedAuction(mockAuctions[0]);
     } finally {
       setIsLoading(false);
     }
@@ -64,10 +103,25 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
 
   const loadAuctionBids = async (auctionId: string) => {
     try {
-      const response = await apiService.request(`/auctions/${auctionId}/bids?limit=10`);
-      setRecentBids(response.data.bids);
+      const response = await apiService.getAuctionBids(auctionId, 10);
+      setRecentBids(response.data || response || []);
     } catch (error) {
       console.error('Failed to load auction bids:', error);
+      // Use mock data
+      setRecentBids([
+        {
+          bidder: { anonymousId: 'ANON_7X2' },
+          amount: 1250,
+          timing: { placedAt: new Date().toISOString() },
+          status: 'active'
+        },
+        {
+          bidder: { anonymousId: 'GHOST_99' },
+          amount: 1200,
+          timing: { placedAt: new Date(Date.now() - 45000).toISOString() },
+          status: 'outbid'
+        }
+      ]);
     }
   };
 
@@ -103,8 +157,10 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
         }, ...prev.slice(0, 9)]);
       }
 
-      // Show notification for bids on watched auctions
-      toast.info(`New bid: ${formatTokenAmount(data.amount)} WKC by ${data.bidder}`);
+      // Show notification for bids
+      if (data.bidder !== user?.anonymousId) {
+        toast.info(`New bid: ${formatTokenAmount(data.amount)} WKC by ${data.bidder}`);
+      }
     });
 
     // Listen for auction endings
@@ -116,7 +172,7 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
       ));
 
       if (selectedAuction?.auctionId === data.auctionId) {
-        toast.success(`Auction ended! Winner: ${data.winner?.anonymousId || 'No winner'}`);
+        toast.success(`Auction ended! Winner: ${data.winner || 'No winner'}`);
       }
     });
 
@@ -125,65 +181,20 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
       loadAuctions(); // Refresh auction list
       toast.info('New auction created!');
     });
-
-    // Listen for token burns
-    socket.on('tokens_burned', (data) => {
-      toast.success(`🔥 ${formatTokenAmount(data.amount)} WKC burned!`, {
-        description: data.reason
-      });
-    });
-  };
-
-  const handlePlaceBid = async () => {
-    if (!selectedAuction || !isAuthenticated || !bidAmount) return;
-
-    const amount = parseFloat(bidAmount);
-    const minBid = selectedAuction.pricing.currentBid + 1; // Minimum increment
-    const userBalance = parseFloat(balance);
-
-    if (amount < minBid) {
-      toast.error(`Bid must be at least ${minBid} WKC`);
-      return;
-    }
-
-    if (amount > userBalance) {
-      toast.error(`Insufficient balance. You have ${formatTokenAmount(balance)} WKC`);
-      return;
-    }
-
-    setIsPlacingBid(true);
-
-    try {
-      // Place bid on blockchain first
-      const txHash = await web3Service.placeBid(selectedAuction.auctionId, bidAmount);
-      
-      // Then notify backend
-      await apiService.placeBid(selectedAuction.id, amount);
-      
-      toast.success('Bid placed successfully!', {
-        description: `Transaction: ${txHash.slice(0, 10)}...${txHash.slice(-6)}`
-      });
-      
-      setBidAmount('');
-      await refreshBalance();
-      
-    } catch (error: any) {
-      console.error('Failed to place bid:', error);
-      toast.error(error.message || 'Failed to place bid');
-    } finally {
-      setIsPlacingBid(false);
-    }
   };
 
   const handleWatchAuction = async (auction: Auction) => {
+    if (!isAuthenticated) {
+      toast.error('Please connect and authenticate your wallet');
+      return;
+    }
+
     try {
       if (auction.isWatching) {
-        await apiService.request(`/auctions/${auction.id}/watch`, { method: 'DELETE' });
-        apiService.unwatchAuction(auction.auctionId);
+        await apiService.unwatchAuction(auction.id);
         toast.info('Removed from watchlist');
       } else {
-        await apiService.request(`/auctions/${auction.id}/watch`, { method: 'POST' });
-        apiService.watchAuction(auction.auctionId);
+        await apiService.watchAuction(auction.id);
         toast.success('Added to watchlist');
       }
       
@@ -195,9 +206,29 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
       if (selectedAuction?.id === auction.id) {
         setSelectedAuction(prev => prev ? { ...prev, isWatching: !prev.isWatching } : null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to toggle watch status:', error);
-      toast.error('Failed to update watchlist');
+      toast.error(error.message || 'Failed to update watchlist');
+    }
+  };
+
+  const formatTimeRemaining = (endTime: string): string => {
+    const now = Date.now();
+    const end = new Date(endTime).getTime();
+    const remaining = end - now;
+    
+    if (remaining <= 0) return 'Ended';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
     }
   };
 
@@ -247,7 +278,7 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
                   {formatTokenAmount(auction.pricing.currentBid.toString())} WKC
                 </span>
                 <span className="text-terminal-red">
-                  {formatTimeRemaining(Math.floor(new Date(auction.timing.endTime).getTime() / 1000))}
+                  {formatTimeRemaining(auction.timing.endTime)}
                 </span>
               </div>
               <div className="flex items-center justify-between mt-1">
@@ -297,7 +328,7 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
             <div className="flex items-center justify-between p-3 border border-panel-border bg-secondary/20 rounded">
               <span className="text-sm text-muted-foreground">Time Remaining:</span>
               <span className="text-terminal-red font-bold animate-pulse-slow">
-                {formatTimeRemaining(Math.floor(new Date(selectedAuction.timing.endTime).getTime() / 1000))}
+                {formatTimeRemaining(selectedAuction.timing.endTime)}
               </span>
             </div>
 
@@ -316,13 +347,13 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
                       index === 0 ? 'animate-glow' : ''
                     }`}
                   >
-                    <span className="text-foreground">{bid.bidder.anonymousId}</span>
+                    <span className="text-foreground">{bid.bidder?.anonymousId || 'Anonymous'}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-terminal-green font-bold">
                         {formatTokenAmount(bid.amount.toString())} WKC
                       </span>
                       <span className="text-muted-foreground">
-                        {new Date(bid.timing.placedAt).toLocaleTimeString()}
+                        {new Date(bid.timing?.placedAt || Date.now()).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
@@ -339,7 +370,6 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
                   minIncrement={1}
                   userBalance={balance}
                   onBidPlaced={() => {
-                    // Refresh auction data
                     loadAuctionBids(selectedAuction.id);
                     refreshBalance();
                   }}
@@ -410,11 +440,6 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
           </div>
         </Card>
       )}
-      
-      {/* Live Activity Feed */}
-      <Card className="border-panel-border bg-card/50 p-4">
-        <LiveActivityFeed />
-      </Card>
     </div>
   );
 };

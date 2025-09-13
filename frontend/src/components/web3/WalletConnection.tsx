@@ -4,20 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useWeb3 } from '@/contexts/Web3Context';
-import { formatAddress } from '@/utils/formatters';
+import { formatAddress, formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
-
-// Simple utility function for formatting token amounts
-const formatTokenAmount = (amount: string | number): string => {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0';
-  if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(2)}M`;
-  } else if (num >= 1000) {
-    return `${(num / 1000).toFixed(2)}K`;
-  }
-  return num.toFixed(2);
-};
 
 export const WalletConnection = () => {
   const { 
@@ -28,18 +16,15 @@ export const WalletConnection = () => {
     user, 
     balance, 
     tokenInfo,
+    isAuthenticated,
     connectWallet, 
     disconnectWallet,
-    refreshBalance
+    refreshBalance,
+    refreshUser
   } = useWeb3();
 
   const [showFullAddress, setShowFullAddress] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const formatAddress = (address: string) => {
-    if (showFullAddress) return address;
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
 
   const getChainName = (chainId: number) => {
     switch (chainId) {
@@ -55,6 +40,7 @@ export const WalletConnection = () => {
     setIsRefreshing(true);
     try {
       await refreshBalance();
+      await refreshUser();
       toast.success('Balance refreshed');
     } catch (error) {
       toast.error('Failed to refresh balance');
@@ -126,7 +112,9 @@ export const WalletConnection = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-terminal-green rounded-full animate-pulse-slow"></div>
-            <span className="text-terminal-green text-sm">WALLET CONNECTED</span>
+            <span className="text-terminal-green text-sm">
+              {isAuthenticated ? 'AUTHENTICATED' : 'CONNECTED'}
+            </span>
           </div>
           <Button 
             onClick={disconnectWallet}
@@ -139,7 +127,7 @@ export const WalletConnection = () => {
         </div>
 
         {/* User Info */}
-        {user && (
+        {user && isAuthenticated ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2 mb-2">
               <div className="text-lg">🎭</div>
@@ -170,8 +158,19 @@ export const WalletConnection = () => {
             </div>
             
             <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Trust Me Bros:</span>
+              <span className="text-terminal-amber">{user.profile.trustMeBros}</span>
+            </div>
+            
+            <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Auctions Won:</span>
               <span className="text-terminal-amber">{user.profile.wonAuctions}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center p-3 border border-terminal-amber/30 bg-terminal-amber/10 rounded">
+            <div className="text-xs text-terminal-amber">
+              Wallet connected but not authenticated with backend
             </div>
           </div>
         )}
@@ -214,8 +213,26 @@ export const WalletConnection = () => {
             </div>
           </div>
           
+          {/* Balance Breakdown */}
+          {user?.balance && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Available:</span>
+                <span className="text-terminal-green">{formatTokenAmount(user.balance.available.toString())}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Locked:</span>
+                <span className="text-terminal-amber">{formatTokenAmount(user.balance.locked.toString())}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total:</span>
+                <span className="text-foreground">{formatTokenAmount(user.balance.total.toString())}</span>
+              </div>
+            </div>
+          )}
+          
           {tokenInfo && (
-            <div className="text-xs text-muted-foreground space-y-1">
+            <div className="text-xs text-muted-foreground space-y-1 border-t border-panel-border pt-2">
               <div className="flex justify-between">
                 <span>Total Supply:</span>
                 <span>{formatTokenAmount(tokenInfo.totalSupply)}</span>
@@ -241,21 +258,23 @@ export const WalletConnection = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button 
-            size="sm" 
-            className="text-xs bg-terminal-green text-background hover:bg-terminal-green/80"
-          >
-            Buy WKC
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="text-xs border-panel-border hover:bg-accent"
-          >
-            View Txns
-          </Button>
-        </div>
+        {isAuthenticated && (
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button 
+              size="sm" 
+              className="text-xs bg-terminal-green text-background hover:bg-terminal-green/80"
+            >
+              Buy WKC
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="text-xs border-panel-border hover:bg-accent"
+            >
+              View Txns
+            </Button>
+          </div>
+        )}
         
         {/* Burn Info */}
         <div className="border border-terminal-red/30 bg-terminal-red/10 p-2 rounded">

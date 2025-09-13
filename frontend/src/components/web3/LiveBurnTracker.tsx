@@ -47,7 +47,31 @@ export const LiveBurnTracker = () => {
       const response = await apiService.getBurnStats('30d');
       setBurnStats(response.data);
       
-      // Simulate recent burns for demo
+      // Load recent burns from transaction history
+      const txResponse = await apiService.request('/tokens/history?type=fee_burn&limit=10');
+      const burns = txResponse.data.transactions?.map((tx: any) => ({
+        id: tx.transactionId,
+        amount: tx.amount.toString(),
+        reason: tx.metadata?.description || 'Platform fee burn',
+        timestamp: new Date(tx.createdAt).toLocaleString(),
+        transactionHash: tx.blockchain?.transactionHash || '0x...'
+      })) || [];
+      
+      setRecentBurns(burns);
+    } catch (error) {
+      console.error('Failed to load burn stats:', error);
+      // Use mock data for demo
+      setBurnStats({
+        totalBurned: 125000,
+        burnCount: 1247,
+        burnRate: 2.34,
+        dailyBurns: [],
+        tokenomics: {
+          deflationaryPressure: 2.34,
+          circulatingSupply: '875000000'
+        }
+      });
+      
       setRecentBurns([
         {
           id: '1',
@@ -62,28 +86,8 @@ export const LiveBurnTracker = () => {
           reason: 'Auction completion fee',
           timestamp: '5m ago',
           transactionHash: '0x2345...6789'
-        },
-        {
-          id: '3',
-          amount: '203.75',
-          reason: 'Platform fee burn',
-          timestamp: '8m ago',
-          transactionHash: '0x3456...7890'
         }
       ]);
-    } catch (error) {
-      console.error('Failed to load burn stats:', error);
-      // Use mock data for demo
-      setBurnStats({
-        totalBurned: 125000,
-        burnCount: 1247,
-        burnRate: 2.34,
-        dailyBurns: [],
-        tokenomics: {
-          deflationaryPressure: 2.34,
-          circulatingSupply: '875000000'
-        }
-      });
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +111,9 @@ export const LiveBurnTracker = () => {
       burnCount: prev.burnCount + 1
     }));
 
+    toast.success(`🔥 ${formatTokenAmount(data.amount)} WKC burned!`, {
+      description: data.reason
+    });
   };
 
   if (isLoading) {

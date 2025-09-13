@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiService, Notification } from '@/lib/api';
@@ -22,10 +21,34 @@ export const RealTimeNotifications = () => {
   const loadNotifications = async () => {
     try {
       const response = await apiService.getNotifications({ limit: 20 });
-      setNotifications(response.data.notifications);
-      setUnreadCount(response.data.unreadCount);
+      setNotifications(response.data.notifications || []);
+      setUnreadCount(response.data.unreadCount || 0);
     } catch (error) {
       console.error('Failed to load notifications:', error);
+      // Use mock data for demo
+      setNotifications([
+        {
+          notificationId: 'NOT_001',
+          type: 'bid_placed',
+          title: 'New Bid Received',
+          message: 'ANON_7X2 placed a bid of 1,250 WKC on iPhone 15 Pro Max',
+          priority: 'medium',
+          data: { amount: 1250, auctionId: 'AUC_001' },
+          channels: { inApp: { read: false } },
+          createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+        },
+        {
+          notificationId: 'NOT_002',
+          type: 'auction_ending',
+          title: 'Auction Ending Soon',
+          message: 'MacBook Pro M3 auction ends in 5 minutes',
+          priority: 'high',
+          data: { auctionId: 'AUC_002' },
+          channels: { inApp: { read: false } },
+          createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        }
+      ]);
+      setUnreadCount(2);
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +73,7 @@ export const RealTimeNotifications = () => {
     socket.on('notification_read', (data) => {
       setNotifications(prev => prev.map(n => 
         n.notificationId === data.notificationId 
-          ? { ...n, isRead: true }
+          ? { ...n, channels: { ...n.channels, inApp: { ...n.channels.inApp, read: true } } }
           : n
       ));
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -62,7 +85,7 @@ export const RealTimeNotifications = () => {
       await apiService.markNotificationRead(notificationId);
       setNotifications(prev => prev.map(n => 
         n.notificationId === notificationId 
-          ? { ...n, isRead: true }
+          ? { ...n, channels: { ...n.channels, inApp: { ...n.channels.inApp, read: true } } }
           : n
       ));
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -101,103 +124,97 @@ export const RealTimeNotifications = () => {
 
   if (!isAuthenticated) {
     return (
-      <Card className="border-panel-border bg-card/50 p-4">
-        <div className="text-center space-y-2">
-          <div className="text-terminal-amber text-lg">🔐</div>
-          <div className="text-sm text-muted-foreground">
-            Connect to The Backdoor for notifications
-          </div>
+      <div className="text-center space-y-2">
+        <div className="text-terminal-amber text-lg">🔐</div>
+        <div className="text-sm text-muted-foreground">
+          Connect to The Backdoor for notifications
         </div>
-      </Card>
+      </div>
     );
   }
 
   if (isLoading) {
     return (
-      <Card className="border-panel-border bg-card/50 p-4">
-        <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-secondary/20 rounded"></div>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-12 bg-secondary/20 rounded"></div>
-          ))}
-        </div>
-      </Card>
+      <div className="animate-pulse space-y-3">
+        <div className="h-4 bg-secondary/20 rounded"></div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-12 bg-secondary/20 rounded"></div>
+        ))}
+      </div>
     );
   }
 
   return (
-    <Card className="border-panel-border bg-card/50 p-4">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-terminal-green">Live Notifications</h3>
-          {unreadCount > 0 && (
-            <Badge className="bg-terminal-red/20 text-terminal-red animate-pulse-slow">
-              {unreadCount} New
-            </Badge>
-          )}
-        </div>
-
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          {notifications.map((notification) => (
-            <div 
-              key={notification.notificationId}
-              className={`p-3 rounded border transition-all cursor-pointer ${
-                notification.isRead 
-                  ? 'border-panel-border/50 bg-secondary/10' 
-                  : 'border-panel-border bg-secondary/20 hover:bg-secondary/30 animate-glow'
-              }`}
-              onClick={() => !notification.isRead && markAsRead(notification.notificationId)}
-            >
-              <div className="flex items-start gap-3">
-                <span className="text-lg">{getNotificationIcon(notification.type)}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-sm font-medium ${notification.isRead ? 'text-muted-foreground' : 'text-foreground'}`}>
-                      {notification.title}
-                    </span>
-                    <span className={`text-xs ${getPriorityColor(notification.priority)}`}>
-                      {notification.priority === 'urgent' && '🔴'}
-                      {notification.priority === 'high' && '🟡'}
-                    </span>
-                  </div>
-                  <p className={`text-xs ${notification.isRead ? 'text-muted-foreground' : 'text-foreground'}`}>
-                    {notification.message}
-                  </p>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(notification.createdAt).toLocaleTimeString()}
-                    </span>
-                    {notification.data?.amount && (
-                      <span className="text-xs text-terminal-green">
-                        {notification.data.amount} WKC
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {!notification.isRead && (
-                  <div className="w-2 h-2 bg-terminal-green rounded-full animate-pulse-slow"></div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {notifications.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-terminal-amber text-2xl mb-2">📭</div>
-            <div className="text-sm text-muted-foreground">No notifications yet</div>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-terminal-green">Live Notifications</h3>
+        {unreadCount > 0 && (
+          <Badge className="bg-terminal-red/20 text-terminal-red animate-pulse-slow">
+            {unreadCount} New
+          </Badge>
         )}
-
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="w-full text-xs border-panel-border hover:bg-accent"
-          onClick={loadNotifications}
-        >
-          Refresh Notifications
-        </Button>
       </div>
-    </Card>
+
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        {notifications.map((notification) => (
+          <div 
+            key={notification.notificationId}
+            className={`p-3 rounded border transition-all cursor-pointer ${
+              notification.channels.inApp.read 
+                ? 'border-panel-border/50 bg-secondary/10' 
+                : 'border-panel-border bg-secondary/20 hover:bg-secondary/30 animate-glow'
+            }`}
+            onClick={() => !notification.channels.inApp.read && markAsRead(notification.notificationId)}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-lg">{getNotificationIcon(notification.type)}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-sm font-medium ${notification.channels.inApp.read ? 'text-muted-foreground' : 'text-foreground'}`}>
+                    {notification.title}
+                  </span>
+                  <span className={`text-xs ${getPriorityColor(notification.priority)}`}>
+                    {notification.priority === 'urgent' && '🔴'}
+                    {notification.priority === 'high' && '🟡'}
+                  </span>
+                </div>
+                <p className={`text-xs ${notification.channels.inApp.read ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {notification.message}
+                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(notification.createdAt).toLocaleTimeString()}
+                  </span>
+                  {notification.data?.amount && (
+                    <span className="text-xs text-terminal-green">
+                      {notification.data.amount} WKC
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!notification.channels.inApp.read && (
+                <div className="w-2 h-2 bg-terminal-green rounded-full animate-pulse-slow"></div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {notifications.length === 0 && (
+        <div className="text-center py-8">
+          <div className="text-terminal-amber text-2xl mb-2">📭</div>
+          <div className="text-sm text-muted-foreground">No notifications yet</div>
+        </div>
+      )}
+
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="w-full text-xs border-panel-border hover:bg-accent"
+        onClick={loadNotifications}
+      >
+        Refresh Notifications
+      </Button>
+    </div>
   );
 };

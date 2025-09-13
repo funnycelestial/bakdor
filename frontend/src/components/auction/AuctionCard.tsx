@@ -20,8 +20,9 @@ interface AuctionCardProps {
 export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, isHot, auctionType = 'forward', watchers, onBidClick }: AuctionCardProps) => {
   const isUrgent = timeLeft.includes('m') && parseInt(timeLeft) < 10;
   const isReverse = auctionType === 'reverse';
-  const { isAuthenticated } = useWeb3();
+  const { isAuthenticated, user, balance } = useWeb3();
   const [isPlacingBid, setIsPlacingBid] = useState(false);
+  const [isWatching, setIsWatching] = useState(false);
 
   const handleBidClick = async () => {
     if (!isAuthenticated) {
@@ -38,6 +39,19 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
       return;
     }
 
+    // Parse current bid from string
+    const currentBidNum = parseFloat(currentBid.replace(/[^\d.]/g, ''));
+    if (amount <= currentBidNum) {
+      toast.error(`${isReverse ? 'Quote' : 'Bid'} must be ${isReverse ? 'lower' : 'higher'} than current ${isReverse ? 'quote' : 'bid'}`);
+      return;
+    }
+
+    const userBalance = parseFloat(balance);
+    if (amount > userBalance) {
+      toast.error(`Insufficient balance. You have ${formatTokenAmount(balance)} WKC`);
+      return;
+    }
+
     setIsPlacingBid(true);
     try {
       await apiService.placeBid(auctionId, amount);
@@ -48,6 +62,28 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
       toast.error(error.message || `Failed to place ${isReverse ? 'quote' : 'bid'}`);
     } finally {
       setIsPlacingBid(false);
+    }
+  };
+
+  const handleWatchClick = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please connect your wallet to watch auctions');
+      return;
+    }
+
+    try {
+      if (isWatching) {
+        await apiService.unwatchAuction(auctionId);
+        setIsWatching(false);
+        toast.info('Removed from watchlist');
+      } else {
+        await apiService.watchAuction(auctionId);
+        setIsWatching(true);
+        toast.success('Added to watchlist');
+      }
+    } catch (error: any) {
+      console.error('Failed to toggle watch status:', error);
+      toast.error(error.message || 'Failed to update watchlist');
     }
   };
   
@@ -72,8 +108,11 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
           </span>
         </div>
         <div className="flex gap-2">
-          <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors flex-shrink-0 min-w-0">
-            Watch
+          <button 
+            onClick={handleWatchClick}
+            className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors flex-shrink-0 min-w-0"
+          >
+            {isWatching ? '👁️ Watching' : 'Watch'}
           </button>
           <button 
             onClick={handleBidClick}

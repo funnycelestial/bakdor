@@ -26,7 +26,7 @@ export const AuctionSearch = () => {
   const loadCategories = async () => {
     try {
       const response = await apiService.getAuctionCategories();
-      setCategories(response.data.categories);
+      setCategories(response.data.categories || []);
     } catch (error) {
       console.error('Failed to load categories:', error);
       // Mock categories for demo
@@ -54,18 +54,19 @@ export const AuctionSearch = () => {
     setIsSearching(true);
     try {
       const filters: any = {};
-      if (selectedCategory) filters.category = selectedCategory;
-      if (priceRange.min) filters.priceMin = parseFloat(priceRange.min);
-      if (priceRange.max) filters.priceMax = parseFloat(priceRange.max);
+      if (selectedCategory && selectedCategory !== 'all') filters.category = selectedCategory;
+      if (priceRange.min) filters.price_min = parseFloat(priceRange.min);
+      if (priceRange.max) filters.price_max = parseFloat(priceRange.max);
       if (auctionType && auctionType !== 'all') filters.type = auctionType;
 
       const response = await apiService.searchAuctions(searchQuery, filters);
-      setSearchResults(response.data.auctions);
+      setSearchResults(response.data.auctions || []);
       
-      toast.success(`Found ${response.data.auctions.length} auctions`);
+      toast.success(`Found ${response.data.auctions?.length || 0} auctions`);
     } catch (error: any) {
       console.error('Search failed:', error);
       toast.error(error.message || 'Search failed');
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -77,6 +78,23 @@ export const AuctionSearch = () => {
     setPriceRange({ min: '', max: '' });
     setAuctionType('all');
     setSearchResults([]);
+  };
+
+  const formatTimeRemaining = (endTime: string): string => {
+    const now = Date.now();
+    const end = new Date(endTime).getTime();
+    const remaining = end - now;
+    
+    if (remaining <= 0) return 'Ended';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
   };
 
   return (
@@ -184,39 +202,21 @@ export const AuctionSearch = () => {
           <h4 className="text-sm font-medium text-foreground mb-3">Search Results</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {searchResults.map((auction) => (
-              <div key={auction.auctionId} className="border border-panel-border bg-secondary/20 p-3 rounded hover:bg-secondary/30 transition-all">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground truncate">{auction.title}</span>
-                    {auction.type === 'reverse' && (
-                      <Badge className="bg-terminal-amber/20 text-terminal-amber text-xs">REV</Badge>
-                    )}
-                  </div>
-                  
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{auction.category}</span>
-                    <span className="text-muted-foreground">{auction.bidding.totalBids} bids</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-xs">
-                    <span className="text-terminal-green">
-                      {formatTokenAmount(auction.pricing.currentBid.toString())} WKC
-                    </span>
-                    <span className="text-terminal-red">
-                      {formatTimeRemaining(Math.floor(new Date(auction.timing.endTime).getTime() / 1000))}
-                    </span>
-                  </div>
-                  
-                  <div className="flex gap-2 mt-2">
-                    <button className="flex-1 bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
-                      Watch
-                    </button>
-                    <button className="flex-1 bg-primary hover:bg-primary/80 px-2 py-1 text-xs text-primary-foreground transition-colors">
-                      {auction.type === 'reverse' ? 'Quote' : 'Bid'}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <AuctionCard
+                key={auction.auctionId}
+                auctionId={auction.auctionId}
+                item={auction.title}
+                currentBid={formatTokenAmount(auction.pricing.currentBid.toString())}
+                timeLeft={formatTimeRemaining(auction.timing.endTime)}
+                category={auction.category}
+                isHot={auction.bidding.totalBids > 10}
+                auctionType={auction.type}
+                watchers={auction.analytics?.watchersCount || 0}
+                onBidClick={() => {
+                  // Refresh search results
+                  handleSearch();
+                }}
+              />
             ))}
           </div>
         </Card>

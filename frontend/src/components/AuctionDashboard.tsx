@@ -28,7 +28,8 @@ import { WatchlistManager } from "./auction/WatchlistManager";
 import { AdvancedAnalytics } from "./auction/AdvancedAnalytics";
 import { QuickActions } from "./auction/QuickActions";
 import { useState, useEffect } from "react";
-import { formatCurrency, formatTimeAgo, formatTokenAmount } from "@/utils/formatters";
+import { formatTokenAmount } from "@/utils/formatters";
+import { apiService } from "@/lib/api";
 
 const formatTimeRemaining = (endTimeMs: number): string => {
   const now = Date.now();
@@ -53,39 +54,64 @@ const AuctionDashboard = () => {
   const { isAuthenticated, user, tokenInfo } = useWeb3();
   const [filteredAuctions, setFilteredAuctions] = useState<any[]>([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
-
-  // Mock auction data for demo
-  const mockAuctions = [
-    {
-      auctionId: 'AUC_001',
-      title: 'iPhone 15 Pro Max 256GB',
-      category: 'electronics',
-      type: 'forward',
-      pricing: { currentBid: 1250, startingBid: 500, reservePrice: 1000, buyNowPrice: 1500 },
-      timing: { endTime: new Date(Date.now() + 4 * 60 * 1000).toISOString() },
-      bidding: { totalBids: 15, uniqueBidders: 8 },
-      analytics: { watchersCount: 23 },
-      status: 'active'
-    },
-    {
-      auctionId: 'AUC_002',
-      title: 'MacBook Pro M3 14"',
-      category: 'electronics',
-      type: 'forward',
-      pricing: { currentBid: 2850, startingBid: 2000, reservePrice: 2500, buyNowPrice: 3200 },
-      timing: { endTime: new Date(Date.now() + 12 * 60 * 1000).toISOString() },
-      bidding: { totalBids: 23, uniqueBidders: 12 },
-      analytics: { watchersCount: 45 },
-      status: 'active'
-    }
-  ];
+  const [endingSoonAuctions, setEndingSoonAuctions] = useState<any[]>([]);
+  const [marketStats, setMarketStats] = useState<any>(null);
 
   useEffect(() => {
-    // Initialize with mock data if no filtered auctions
-    if (filteredAuctions.length === 0 && !isLoadingFilters) {
-      setFilteredAuctions(mockAuctions);
-    }
+    loadEndingSoonAuctions();
+    loadMarketStats();
   }, []);
+
+  const loadEndingSoonAuctions = async () => {
+    try {
+      const response = await apiService.getEndingSoonAuctions(1, 10);
+      setEndingSoonAuctions(response.data.auctions || []);
+    } catch (error) {
+      console.error('Failed to load ending soon auctions:', error);
+      // Use mock data as fallback
+      setEndingSoonAuctions([
+        {
+          auctionId: "AUC_001",
+          title: "iPhone 15 Pro Max 256GB",
+          category: "electronics",
+          pricing: { currentBid: 1250 },
+          timing: { endTime: new Date(Date.now() + 4 * 60 * 1000).toISOString() },
+          bidding: { totalBids: 15 },
+          analytics: { watchersCount: 23 },
+          status: 'active'
+        },
+        {
+          auctionId: "AUC_002",
+          title: "MacBook Pro M3 14\"",
+          category: "electronics",
+          pricing: { currentBid: 2850 },
+          timing: { endTime: new Date(Date.now() + 12 * 60 * 1000).toISOString() },
+          bidding: { totalBids: 23 },
+          analytics: { watchersCount: 45 },
+          status: 'active'
+        }
+      ]);
+    }
+  };
+
+  const loadMarketStats = async () => {
+    try {
+      const response = await apiService.getMarketOverview();
+      setMarketStats(response.data);
+    } catch (error) {
+      console.error('Failed to load market stats:', error);
+      // Use mock data
+      setMarketStats({
+        activeAuctions: 47,
+        totalBidders: 1234,
+        tokensInPlay: 45678,
+        avgBidValue: 892,
+        successRate: 73,
+        tokensBurnedToday: 1234
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 font-terminal text-foreground">
       {/* Header */}
@@ -183,13 +209,13 @@ const AuctionDashboard = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {(filteredAuctions.length > 0 ? filteredAuctions : mockAuctions).map((auction) => (
+                      {filteredAuctions.map((auction) => (
                         <AuctionCard
                           key={auction.auctionId}
                           auctionId={auction.auctionId}
                           item={auction.title}
                           currentBid={formatTokenAmount(auction.pricing.currentBid.toString())}
-                          timeLeft={formatTimeRemaining(Math.floor(new Date(auction.timing.endTime).getTime() / 1000))}
+                          timeLeft={formatTimeRemaining(new Date(auction.timing.endTime).getTime())}
                           category={auction.category}
                           isHot={auction.bidding.totalBids > 10}
                           auctionType={auction.type}
@@ -254,27 +280,27 @@ const AuctionDashboard = () => {
             <div className="space-y-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Active Auctions:</span>
-                <span className="text-terminal-green">47</span>
+                <span className="text-terminal-green">{marketStats?.activeAuctions || 47}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Bidders:</span>
-                <span className="text-terminal-green">1,234</span>
+                <span className="text-terminal-green">{marketStats?.totalBidders || 1234}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tokens in Play:</span>
-                <span className="text-terminal-amber">45,678 WKC</span>
+                <span className="text-terminal-amber">{formatTokenAmount(marketStats?.tokensInPlay?.toString() || '45678')} WKC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Avg. Bid Value:</span>
-                <span className="text-foreground">892 WKC</span>
+                <span className="text-foreground">{formatTokenAmount(marketStats?.avgBidValue?.toString() || '892')} WKC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Success Rate:</span>
-                <span className="text-terminal-green">73%</span>
+                <span className="text-terminal-green">{marketStats?.successRate || 73}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tokens Burned Today:</span>
-                <span className="text-terminal-red">🔥 1,234 WKC</span>
+                <span className="text-terminal-red">🔥 {formatTokenAmount(marketStats?.tokensBurnedToday?.toString() || '1234')} WKC</span>
               </div>
             </div>
           </Card>
@@ -289,25 +315,17 @@ const AuctionDashboard = () => {
             </p>
 
             <div className="space-y-3">
-              {[
-                { auctionId: "AUC_001", item: "iPhone 15 Pro Max", currentBid: "1,250", timeLeft: "4m 37s", category: "Electronics", isHot: true, watchers: 45 },
-                { auctionId: "AUC_002", item: "MacBook Pro M3", currentBid: "2,850", timeLeft: "5m 12s", category: "Electronics", isHot: true, watchers: 23 },
-                { auctionId: "AUC_003", item: "Nike Air Jordan 1", currentBid: "450", timeLeft: "8m 33s", category: "Fashion", watchers: 8 },
-                { auctionId: "AUC_004", item: "Samsung Galaxy S24", currentBid: "980", timeLeft: "12m 45s", category: "Electronics", watchers: 15 },
-                { auctionId: "AUC_005", item: "Canon EOS R5", currentBid: "3,400", timeLeft: "31m 02s", category: "Photography", watchers: 12 },
-                { auctionId: "AUC_006", item: "Rolex Submariner", currentBid: "8,500", timeLeft: "45m 18s", category: "Luxury", watchers: 67 },
-                { auctionId: "AUC_007", item: "iPad Pro 12.9\"", currentBid: "1,450", timeLeft: "58m 44s", category: "Electronics", watchers: 31 }
-              ].map((auction, i) => (
+              {endingSoonAuctions.map((auction, i) => (
                 <AuctionCard
-                  key={i}
+                  key={auction.auctionId || i}
                   auctionId={auction.auctionId}
-                  item={auction.item}
-                  currentBid={auction.currentBid}
-                  timeLeft={auction.timeLeft}
+                  item={auction.title}
+                  currentBid={formatTokenAmount(auction.pricing.currentBid.toString())}
+                  timeLeft={formatTimeRemaining(new Date(auction.timing.endTime).getTime())}
                   category={auction.category}
-                  isHot={auction.isHot}
-                  auctionType="forward"
-                  watchers={auction.watchers}
+                  isHot={auction.bidding.totalBids > 10}
+                  auctionType={auction.type || "forward"}
+                  watchers={auction.analytics?.watchersCount || 0}
                   onBidClick={() => {}}
                 />
               ))}

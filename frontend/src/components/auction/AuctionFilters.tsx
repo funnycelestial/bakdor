@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
@@ -49,18 +48,18 @@ export const AuctionFilters = ({ onFiltersChange, onLoadingChange }: AuctionFilt
   const sortOptions = [
     { value: 'newest', label: 'Newest First' },
     { value: 'oldest', label: 'Oldest First' },
-    { value: 'ending_soon', label: 'Ending Soon' },
-    { value: 'price_low', label: 'Price: Low to High' },
-    { value: 'price_high', label: 'Price: High to Low' },
-    { value: 'most_bids', label: 'Most Bids' }
+    { value: 'endingsoon', label: 'Ending Soon' },
+    { value: 'pricelow', label: 'Price: Low to High' },
+    { value: 'pricehigh', label: 'Price: High to Low' },
+    { value: 'mostbids', label: 'Most Bids' }
   ];
 
   const endingInOptions = [
     { value: 'all', label: 'Any Time' },
-    { value: '1h', label: 'Next Hour' },
-    { value: '6h', label: 'Next 6 Hours' },
-    { value: '24h', label: 'Next 24 Hours' },
-    { value: '7d', label: 'Next 7 Days' }
+    { value: 'nexthour', label: 'Next Hour' },
+    { value: 'next6h', label: 'Next 6 Hours' },
+    { value: 'next24h', label: 'Next 24 Hours' },
+    { value: 'next7d', label: 'Next 7 Days' }
   ];
 
   useEffect(() => {
@@ -96,41 +95,22 @@ export const AuctionFilters = ({ onFiltersChange, onLoadingChange }: AuctionFilt
     try {
       const params: any = {
         status: filters.status,
-        sort: filters.sortBy,
+        sortBy: filters.sortBy,
         limit: 50
       };
 
       if (filters.category && filters.category !== 'all') params.category = filters.category;
       if (filters.type && filters.type !== 'all') params.type = filters.type;
       if (filters.condition && filters.condition !== 'all') params.condition = filters.condition;
-      if (filters.priceRange[0] > 0) params.price_min = filters.priceRange[0];
-      if (filters.priceRange[1] < 10000) params.price_max = filters.priceRange[1];
+      if (filters.priceRange[0] > 0) params.minPrice = filters.priceRange[0];
+      if (filters.priceRange[1] < 10000) params.maxPrice = filters.priceRange[1];
+      if (filters.endingIn && filters.endingIn !== 'all') params.time = filters.endingIn;
+      if (filters.hasReserve) params.specialFeature = 'reserve';
+      if (filters.hasBuyNow) params.specialFeature = 'buyNow';
+      if (filters.minBids > 0) params.minBids = filters.minBids;
 
       const response = await apiService.getAuctions(params);
-      let filteredAuctions = response.data.auctions;
-
-      if (filters.hasReserve) {
-        filteredAuctions = filteredAuctions.filter(a => a.pricing.reservePrice > 0);
-      }
-
-      if (filters.hasBuyNow) {
-        filteredAuctions = filteredAuctions.filter(a => a.pricing.buyNowPrice > 0);
-      }
-
-      if (filters.minBids > 0) {
-        filteredAuctions = filteredAuctions.filter(a => a.bidding.totalBids >= filters.minBids);
-      }
-
-      if (filters.endingIn && filters.endingIn !== 'all') {
-        const now = Date.now();
-        const timeLimit = getTimeLimit(filters.endingIn);
-        filteredAuctions = filteredAuctions.filter(a => {
-          const endTime = new Date(a.timing.endTime).getTime();
-          return endTime - now <= timeLimit && endTime > now;
-        });
-      }
-
-      onFiltersChange(filteredAuctions);
+      onFiltersChange(response.data.auctions || []);
     } catch (error) {
       console.error('Failed to apply filters:', error);
       toast.error('Failed to load auctions');
@@ -138,17 +118,6 @@ export const AuctionFilters = ({ onFiltersChange, onLoadingChange }: AuctionFilt
     } finally {
       setIsLoading(false);
       onLoadingChange(false);
-    }
-  };
-
-  const getTimeLimit = (endingIn: string): number => {
-    switch (endingIn) {
-      case '1h': return 60 * 60 * 1000;
-      case '6h': return 6 * 60 * 60 * 1000;
-      case '24h': return 24 * 60 * 60 * 1000;
-      case '7d': return 7 * 24 * 60 * 60 * 1000;
-      case 'all': return Infinity;
-      default: return Infinity;
     }
   };
 
