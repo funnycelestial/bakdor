@@ -21,7 +21,7 @@ export const EscrowPanel = () => {
   const loadEscrowTransactions = async () => {
     try {
       const response = await apiService.getEscrowTransactions({ limit: 20 });
-      setEscrowTransactions(response.data.escrows);
+      setEscrowTransactions(response.data.escrows || []);
     } catch (error) {
       console.error('Failed to load escrow transactions:', error);
       toast.error('Failed to load escrow transactions');
@@ -45,9 +45,12 @@ export const EscrowPanel = () => {
   };
 
   const handleMarkDelivered = async (escrowId: string) => {
+    const trackingNumber = prompt('Enter tracking number (optional):');
+    const carrier = prompt('Enter carrier name (optional):');
+    
     setActionLoading(escrowId);
     try {
-      await apiService.markAsDelivered(escrowId);
+      await apiService.markAsDelivered(escrowId, trackingNumber || undefined, carrier || undefined);
       await loadEscrowTransactions();
       toast.success('Item marked as delivered');
     } catch (error: any) {
@@ -77,22 +80,26 @@ export const EscrowPanel = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-terminal-amber/20 text-terminal-amber';
+      case 'created': return 'bg-terminal-amber/20 text-terminal-amber';
       case 'funded': return 'bg-terminal-green/20 text-terminal-green';
       case 'delivered': return 'bg-blue-500/20 text-blue-400';
+      case 'confirmed': return 'bg-green-500/20 text-green-400';
+      case 'released': return 'bg-green-500/20 text-green-400';
       case 'disputed': return 'bg-terminal-red/20 text-terminal-red';
-      case 'completed': return 'bg-green-500/20 text-green-400';
+      case 'resolved': return 'bg-green-500/20 text-green-400';
       default: return 'bg-muted text-muted-foreground';
     }
   };
 
   const getStatusProgress = (status: string) => {
     switch (status) {
-      case 'pending': return 25;
+      case 'created': return 25;
       case 'funded': return 50;
       case 'delivered': return 75;
-      case 'completed': return 100;
+      case 'confirmed': return 100;
+      case 'released': return 100;
       case 'disputed': return 40;
+      case 'resolved': return 100;
       default: return 0;
     }
   };
@@ -128,84 +135,84 @@ export const EscrowPanel = () => {
         </div>
       ) : (
         <div className="space-y-3">
-        {escrowTransactions.map((transaction) => (
-          <div key={transaction.id} className="border border-panel-border bg-secondary/20 p-3 rounded">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-medium text-foreground">{transaction.auctionItem}</div>
-              <Badge className={getStatusColor(transaction.status)}>
-                {transaction.status.toUpperCase()}
-              </Badge>
-            </div>
-            
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Escrow ID:</span>
-                <span className="text-foreground">{transaction.escrowId}</span>
+          {escrowTransactions.map((transaction) => (
+            <div key={transaction.id} className="border border-panel-border bg-secondary/20 p-3 rounded">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-foreground">{transaction.auctionItem}</div>
+                <Badge className={getStatusColor(transaction.status)}>
+                  {transaction.status.toUpperCase()}
+                </Badge>
               </div>
               
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Amount:</span>
-                <span className="text-terminal-green">{transaction.amount} WKC</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Buyer:</span>
-                <span className="text-foreground">{transaction.buyer}</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Seller:</span>
-                <span className="text-foreground">{transaction.seller}</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Delivery Deadline:</span>
-                <span className="text-terminal-red">{transaction.deliveryDeadline}</span>
-              </div>
-              
-              <div className="mt-2">
-                <div className="flex justify-between mb-1">
-                  <span className="text-muted-foreground">Progress:</span>
-                  <span className="text-foreground">{getStatusProgress(transaction.status)}%</span>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Escrow ID:</span>
+                  <span className="text-foreground">{transaction.escrowId}</span>
                 </div>
-                <Progress value={getStatusProgress(transaction.status)} className="h-1" />
-              </div>
-              
-              <div className="flex gap-2 mt-3">
-                {transaction.status === 'delivered' && (
-                  <button 
-                    onClick={() => handleConfirmDelivery(transaction.escrowId)}
-                    disabled={actionLoading === transaction.escrowId}
-                    className="bg-terminal-green px-2 py-1 text-xs text-background hover:bg-terminal-green/80 transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === transaction.escrowId ? 'Processing...' : 'Confirm Delivery'}
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="text-terminal-green">{transaction.amount} WKC</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Buyer:</span>
+                  <span className="text-foreground">{transaction.buyer}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Seller:</span>
+                  <span className="text-foreground">{transaction.seller}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Delivery Deadline:</span>
+                  <span className="text-terminal-red">{transaction.deliveryDeadline}</span>
+                </div>
+                
+                <div className="mt-2">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-muted-foreground">Progress:</span>
+                    <span className="text-foreground">{getStatusProgress(transaction.status)}%</span>
+                  </div>
+                  <Progress value={getStatusProgress(transaction.status)} className="h-1" />
+                </div>
+                
+                <div className="flex gap-2 mt-3">
+                  {transaction.status === 'delivered' && transaction.buyer === user?.anonymousId && (
+                    <button 
+                      onClick={() => handleConfirmDelivery(transaction.escrowId)}
+                      disabled={actionLoading === transaction.escrowId}
+                      className="bg-terminal-green px-2 py-1 text-xs text-background hover:bg-terminal-green/80 transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === transaction.escrowId ? 'Processing...' : 'Confirm Delivery'}
+                    </button>
+                  )}
+                  {transaction.status === 'funded' && transaction.seller === user?.anonymousId && (
+                    <button 
+                      onClick={() => handleMarkDelivered(transaction.escrowId)}
+                      disabled={actionLoading === transaction.escrowId}
+                      className="bg-terminal-amber px-2 py-1 text-xs text-background hover:bg-terminal-amber/80 transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === transaction.escrowId ? 'Processing...' : 'Mark Delivered'}
+                    </button>
+                  )}
+                  <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
+                    View Details
                   </button>
-                )}
-                {transaction.status === 'funded' && transaction.seller === user?.anonymousId && (
-                  <button 
-                    onClick={() => handleMarkDelivered(transaction.escrowId)}
-                    disabled={actionLoading === transaction.escrowId}
-                    className="bg-terminal-amber px-2 py-1 text-xs text-background hover:bg-terminal-amber/80 transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === transaction.escrowId ? 'Processing...' : 'Mark Delivered'}
-                  </button>
-                )}
-                <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
-                  View Details
-                </button>
-                {(transaction.status === 'funded' || transaction.status === 'delivered') && (
-                  <button 
-                    onClick={() => handleDispute(transaction.escrowId)}
-                    disabled={actionLoading === transaction.escrowId}
-                    className="bg-terminal-red/20 hover:bg-terminal-red/30 px-2 py-1 text-xs text-terminal-red transition-colors disabled:opacity-50"
-                  >
-                    File Dispute
-                  </button>
-                )}
+                  {(transaction.status === 'funded' || transaction.status === 'delivered') && (
+                    <button 
+                      onClick={() => handleDispute(transaction.escrowId)}
+                      disabled={actionLoading === transaction.escrowId}
+                      className="bg-terminal-red/20 hover:bg-terminal-red/30 px-2 py-1 text-xs text-terminal-red transition-colors disabled:opacity-50"
+                    >
+                      File Dispute
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
         </div>
       )}
 

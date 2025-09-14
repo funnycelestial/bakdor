@@ -61,6 +61,7 @@ export const BidIncrement = ({
 
     setIsPlacing(true);
     try {
+      // Use the correct backend endpoint for placing bids
       await apiService.placeBid(auctionId, amount);
       toast.success(`Bid placed: ${formatTokenAmount(amount.toString())} WKC`);
       setCustomAmount('');

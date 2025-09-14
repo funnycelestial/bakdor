@@ -115,14 +115,14 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 
   const authenticateUser = async (address: string) => {
     try {
-      // First, try to get nonce for signing
+      // Step 1: Get nonce for signing
       const nonceResponse = await apiService.login(address);
       
       if (nonceResponse.step === 'sign') {
         // Need to sign the message
         const signature = await web3Service.signMessage(nonceResponse.message);
         
-        // Send signature for verification
+        // Step 2: Send signature for verification
         const authResponse = await apiService.login(address, signature);
         
         if (authResponse.step === 'verified') {
@@ -139,7 +139,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
             refreshTokenInfo()
           ]);
           
-          toast.success(`Welcome, ${authResponse.user.anonymousId}!`);
+          toast.success(`Welcome back, ${authResponse.user.anonymousId}!`);
           return authResponse.user;
         }
       } else if (nonceResponse.user) {
@@ -225,8 +225,8 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 
   const refreshTokenInfo = async () => {
     try {
-      const info = await web3Service.getTokenInfo();
-      setTokenInfo(info);
+      const info = await apiService.getTokenInfo();
+      setTokenInfo(info.data.token);
     } catch (error) {
       console.error('Failed to refresh token info:', error);
       // Use mock data as fallback

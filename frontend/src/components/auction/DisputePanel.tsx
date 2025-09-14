@@ -24,7 +24,7 @@ export const DisputePanel = () => {
   const loadDisputes = async () => {
     try {
       const response = await apiService.getDisputes({ limit: 20 });
-      setDisputes(response.data.disputes);
+      setDisputes(response.data.disputes || []);
     } catch (error) {
       console.error('Failed to load disputes:', error);
       toast.error('Failed to load disputes');
@@ -39,7 +39,7 @@ export const DisputePanel = () => {
         status: 'funded',
         limit: 50 
       });
-      setEscrowOptions(response.data.escrows);
+      setEscrowOptions(response.data.escrows || []);
     } catch (error) {
       console.error('Failed to load escrow options:', error);
     }
@@ -53,7 +53,16 @@ export const DisputePanel = () => {
 
     setIsSubmitting(true);
     try {
-      await apiService.initiateDispute(selectedEscrow, newDispute.trim());
+      await apiService.request('/disputes', {
+        method: 'POST',
+        body: JSON.stringify({
+          escrowId: selectedEscrow,
+          reason: 'Dispute filed',
+          description: newDispute.trim(),
+          category: 'other'
+        })
+      });
+      
       await loadDisputes();
       setNewDispute("");
       setSelectedEscrow("");
@@ -119,7 +128,7 @@ export const DisputePanel = () => {
             onChange={(e) => setSelectedEscrow(e.target.value)}
             className="w-full bg-background border border-panel-border px-2 py-1 text-xs focus:border-terminal-green focus:outline-none"
           >
-            <option value="none">Select Escrow Transaction</option>
+            <option value="">Select Escrow Transaction</option>
             {escrowOptions.map((escrow) => (
               <option key={escrow.escrowId} value={escrow.escrowId}>
                 {escrow.escrowId} - {escrow.auctionItem}
@@ -140,7 +149,6 @@ export const DisputePanel = () => {
             className="bg-terminal-red px-3 py-1 text-xs text-background hover:bg-terminal-red/80 transition-colors disabled:opacity-50"
           >
             {isSubmitting ? 'Filing...' : 'File Dispute'}
-            File Dispute
           </button>
         </div>
       </div>
@@ -157,69 +165,62 @@ export const DisputePanel = () => {
         </div>
       ) : (
         <div className="space-y-3">
-        {disputes.map((dispute) => (
-          <div key={dispute.disputeId} className="border border-panel-border bg-secondary/20 p-3 rounded">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-medium text-foreground">{dispute.auctionItem}</div>
-              <Badge className={getStatusColor(dispute.status)}>
-                {dispute.status.toUpperCase()}
-              </Badge>
-            </div>
-            
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Dispute ID:</span>
-                <span className="text-foreground">{dispute.disputeId}</span>
+          {disputes.map((dispute) => (
+            <div key={dispute.disputeId} className="border border-panel-border bg-secondary/20 p-3 rounded">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-foreground">{dispute.auctionItem}</div>
+                <Badge className={getStatusColor(dispute.status)}>
+                  {dispute.status.toUpperCase()}
+                </Badge>
               </div>
               
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Escrow:</span>
-                <span className="text-foreground">{dispute.escrowId}</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Amount:</span>
-                <span className="text-terminal-green">{dispute.amount} WKC</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Initiator:</span>
-                <span className="text-foreground">{dispute.initiator}</span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Respondent:</span>
-                <span className="text-foreground">{dispute.respondent}</span>
-              </div>
-              
-              {dispute.adminAssigned && (
+              <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Admin:</span>
-                  <span className="text-terminal-amber">{dispute.adminAssigned}</span>
+                  <span className="text-muted-foreground">Dispute ID:</span>
+                  <span className="text-foreground">{dispute.disputeId}</span>
                 </div>
-              )}
-              
-              <div className="mt-2">
-                <span className="text-muted-foreground">Reason:</span>
-                <p className="text-foreground mt-1 p-2 bg-background/50 rounded text-xs">
-                  {dispute.reason}
-                </p>
-              </div>
-              
-              <div className="flex gap-2 mt-3">
-                <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
-                  View Details
-                </button>
-                <button 
-                  onClick={() => handleRespondToDispute(dispute.disputeId)}
-                  className="bg-terminal-amber px-2 py-1 text-xs text-background hover:bg-terminal-amber/80 transition-colors"
-                >
-                  Add Response
-                </button>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Escrow:</span>
+                  <span className="text-foreground">{dispute.escrowId}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="text-terminal-green">{dispute.amount} WKC</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Initiator:</span>
+                  <span className="text-foreground">{dispute.initiator}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Respondent:</span>
+                  <span className="text-foreground">{dispute.respondent}</span>
+                </div>
+                
+                <div className="mt-2">
+                  <span className="text-muted-foreground">Reason:</span>
+                  <p className="text-foreground mt-1 p-2 bg-background/50 rounded text-xs">
+                    {dispute.reason}
+                  </p>
+                </div>
+                
+                <div className="flex gap-2 mt-3">
+                  <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
+                    View Details
+                  </button>
+                  <button 
+                    onClick={() => handleRespondToDispute(dispute.disputeId)}
+                    className="bg-terminal-amber px-2 py-1 text-xs text-background hover:bg-terminal-amber/80 transition-colors"
+                  >
+                    Add Response
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
         </div>
       )}
 

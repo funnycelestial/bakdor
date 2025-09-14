@@ -60,7 +60,7 @@ export const MyAuctions = () => {
     try {
       await apiService.retractBid(bidId);
       await loadMyData();
-      toast.success('Bid retracted successfully');
+      toast.success('Bid retracted successfully (penalty applied)');
     } catch (error: any) {
       console.error('Failed to retract bid:', error);
       toast.error(error.message || 'Failed to retract bid');

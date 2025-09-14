@@ -37,14 +37,12 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
 
   const loadAuctions = async () => {
     try {
-      const response = await apiService.getLiveAuctions({
-        sort: 'ending_soon',
-        limit: 20
-      });
+      // Use the market/live endpoint for real-time auctions
+      const response = await apiService.request('/market/live?sort=ending_soon&limit=20');
       
-      setAuctions(response.data.auctions);
+      setAuctions(response.data.auctions || []);
       
-      if (response.data.auctions.length > 0 && !selectedAuction) {
+      if (response.data.auctions?.length > 0 && !selectedAuction) {
         setSelectedAuction(response.data.auctions[0]);
         loadAuctionBids(response.data.auctions[0].id);
       }
@@ -104,7 +102,7 @@ export const RealTimeAuctions = ({ selectedAuctionId }: RealTimeAuctionsProps) =
   const loadAuctionBids = async (auctionId: string) => {
     try {
       const response = await apiService.getAuctionBids(auctionId, 10);
-      setRecentBids(response.data || response || []);
+      setRecentBids(response.data?.bids || response.data || []);
     } catch (error) {
       console.error('Failed to load auction bids:', error);
       // Use mock data

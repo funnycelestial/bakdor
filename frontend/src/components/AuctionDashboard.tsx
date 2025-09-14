@@ -15,7 +15,6 @@ import { DisputePanel } from "./auction/DisputePanel";
 import { NotificationPanel } from "./auction/NotificationPanel";
 import { PaymentGateway } from "./auction/PaymentGateway";
 import { SecurityPanel } from "./auction/SecurityPanel";
-import { AdminDashboard } from "./auction/AdminDashboard";
 import { UserWallet } from "./auction/UserWallet";
 import { AuctionAnalytics } from "./auction/AuctionAnalytics";
 import { AuctionSearch } from "./auction/AuctionSearch";
@@ -102,12 +101,11 @@ const AuctionDashboard = () => {
       console.error('Failed to load market stats:', error);
       // Use mock data
       setMarketStats({
-        activeAuctions: 47,
-        totalBidders: 1234,
-        tokensInPlay: 45678,
-        avgBidValue: 892,
-        successRate: 73,
-        tokensBurnedToday: 1234
+        users: { total: 12456, active: 1234 },
+        auctions: { total: 8901, active: 47, successRate: 73 },
+        tokens: { inPlay: 45678, burnedToday: 1234 },
+        volume: { last24Hours: 125000 },
+        bidding: { totalBids: 15678, averageBid: 892 }
       });
     }
   };
@@ -118,7 +116,6 @@ const AuctionDashboard = () => {
       <div className="mb-6 border border-panel-border bg-card/50 p-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="text-lg lg:text-xl font-bold text-foreground">█ WKC ANONYMOUS AUCTION MARKETPLACE █</div>
             <div className="text-lg lg:text-xl font-bold text-foreground">█ THE BACKDOOR █</div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-live-pulse rounded-full animate-pulse-slow"></div>
@@ -159,14 +156,18 @@ const AuctionDashboard = () => {
           </div>
           
           {/* Notifications Panel */}
-          <Card className="border-panel-border bg-card/50 p-4 mb-4">
-            <RealTimeNotifications />
-          </Card>
+          {isAuthenticated && (
+            <Card className="border-panel-border bg-card/50 p-4 mb-4">
+              <RealTimeNotifications />
+            </Card>
+          )}
           
           {/* Security Panel */}
-          <Card className="border-panel-border bg-card/50 p-4">
-            <SecurityPanel />
-          </Card>
+          {isAuthenticated && (
+            <Card className="border-panel-border bg-card/50 p-4">
+              <SecurityPanel />
+            </Card>
+          )}
         </div>
 
         {/* Center Panel - Main Auction Interface */}
@@ -174,16 +175,15 @@ const AuctionDashboard = () => {
           <Card className="border-panel-border bg-card/50 p-4">
             <Tabs defaultValue="marketplace" className="w-full">
               <div className="overflow-x-auto">
-                <TabsList className="grid w-full grid-cols-4 sm:grid-cols-6 lg:grid-cols-9 gap-1 min-w-max">
-                <TabsTrigger value="live-auctions" className="text-xs px-1 sm:px-3 sm:text-sm">Live</TabsTrigger>
-                <TabsTrigger value="marketplace" className="text-xs px-1 sm:px-3 sm:text-sm">Market</TabsTrigger>
-                <TabsTrigger value="search" className="text-xs px-1 sm:px-3 sm:text-sm">Search</TabsTrigger>
-                <TabsTrigger value="create" className="text-xs px-1 sm:px-3 sm:text-sm">Create</TabsTrigger>
-                <TabsTrigger value="my-auctions" className="text-xs px-1 sm:px-3 sm:text-sm hidden sm:block">Items</TabsTrigger>
-                <TabsTrigger value="watchlist" className="text-xs px-1 sm:px-3 sm:text-sm hidden sm:block">Watch</TabsTrigger>
-                <TabsTrigger value="analytics" className="text-xs px-1 sm:px-3 sm:text-sm hidden lg:block">Analytics</TabsTrigger>
-                <TabsTrigger value="transparency" className="text-xs px-1 sm:px-3 sm:text-sm hidden md:block">Data</TabsTrigger>
-                <TabsTrigger value="admin" className="text-xs px-1 sm:px-3 sm:text-sm hidden lg:block">Admin</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1 min-w-max">
+                  <TabsTrigger value="live-auctions" className="text-xs px-1 sm:px-3 sm:text-sm">Live</TabsTrigger>
+                  <TabsTrigger value="marketplace" className="text-xs px-1 sm:px-3 sm:text-sm">Market</TabsTrigger>
+                  <TabsTrigger value="search" className="text-xs px-1 sm:px-3 sm:text-sm">Search</TabsTrigger>
+                  <TabsTrigger value="create" className="text-xs px-1 sm:px-3 sm:text-sm">Create</TabsTrigger>
+                  <TabsTrigger value="my-auctions" className="text-xs px-1 sm:px-3 sm:text-sm hidden sm:block">Items</TabsTrigger>
+                  <TabsTrigger value="watchlist" className="text-xs px-1 sm:px-3 sm:text-sm hidden sm:block">Watch</TabsTrigger>
+                  <TabsTrigger value="analytics" className="text-xs px-1 sm:px-3 sm:text-sm hidden lg:block">Analytics</TabsTrigger>
+                  <TabsTrigger value="transparency" className="text-xs px-1 sm:px-3 sm:text-sm hidden md:block">Data</TabsTrigger>
                 </TabsList>
               </div>
               
@@ -254,10 +254,6 @@ const AuctionDashboard = () => {
               <TabsContent value="transparency">
                 <TransparencyDashboard />
               </TabsContent>
-              
-              <TabsContent value="admin">
-                <AdminDashboard />
-              </TabsContent>
             </Tabs>
           </Card>
         </div>
@@ -280,27 +276,27 @@ const AuctionDashboard = () => {
             <div className="space-y-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Active Auctions:</span>
-                <span className="text-terminal-green">{marketStats?.activeAuctions || 47}</span>
+                <span className="text-terminal-green">{marketStats?.auctions?.active || 47}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Bidders:</span>
-                <span className="text-terminal-green">{marketStats?.totalBidders || 1234}</span>
+                <span className="text-terminal-green">{marketStats?.users?.active || 1234}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tokens in Play:</span>
-                <span className="text-terminal-amber">{formatTokenAmount(marketStats?.tokensInPlay?.toString() || '45678')} WKC</span>
+                <span className="text-terminal-amber">{formatTokenAmount(marketStats?.tokens?.inPlay?.toString() || '45678')} WKC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Avg. Bid Value:</span>
-                <span className="text-foreground">{formatTokenAmount(marketStats?.avgBidValue?.toString() || '892')} WKC</span>
+                <span className="text-foreground">{formatTokenAmount(marketStats?.bidding?.averageBid?.toString() || '892')} WKC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Success Rate:</span>
-                <span className="text-terminal-green">{marketStats?.successRate || 73}%</span>
+                <span className="text-terminal-green">{marketStats?.auctions?.successRate || 73}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tokens Burned Today:</span>
-                <span className="text-terminal-red">🔥 {formatTokenAmount(marketStats?.tokensBurnedToday?.toString() || '1234')} WKC</span>
+                <span className="text-terminal-red">🔥 {formatTokenAmount(marketStats?.tokens?.burnedToday?.toString() || '1234')} WKC</span>
               </div>
             </div>
           </Card>

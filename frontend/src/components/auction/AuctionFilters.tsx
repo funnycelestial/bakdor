@@ -78,7 +78,7 @@ export const AuctionFilters = ({ onFiltersChange, onLoadingChange }: AuctionFilt
   const loadCategories = async () => {
     try {
       const response = await apiService.getAuctionCategories();
-      setCategories(response.data.categories);
+      setCategories(response.data.categories || []);
     } catch (error) {
       console.error('Failed to load categories:', error);
       setCategories(categoryOptions.map(cat => ({ 
@@ -105,11 +105,18 @@ export const AuctionFilters = ({ onFiltersChange, onLoadingChange }: AuctionFilt
       if (filters.priceRange[0] > 0) params.minPrice = filters.priceRange[0];
       if (filters.priceRange[1] < 10000) params.maxPrice = filters.priceRange[1];
       if (filters.endingIn && filters.endingIn !== 'all') params.time = filters.endingIn;
-      if (filters.hasReserve) params.specialFeature = 'reserve';
-      if (filters.hasBuyNow) params.specialFeature = 'buyNow';
+      if (filters.hasReserve) params.hasReserve = true;
+      if (filters.hasBuyNow) params.hasBuyNow = true;
       if (filters.minBids > 0) params.minBids = filters.minBids;
 
-      const response = await apiService.getAuctions(params);
+      // Use the market/filtered endpoint for comprehensive filtering
+      const response = await apiService.request('/market/filtered', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
       onFiltersChange(response.data.auctions || []);
     } catch (error) {
       console.error('Failed to apply filters:', error);

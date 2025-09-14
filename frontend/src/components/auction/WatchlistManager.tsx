@@ -22,10 +22,8 @@ export const WatchlistManager = () => {
 
   const loadWatchedAuctions = async () => {
     try {
-      // Get all auctions and filter watched ones
-      const response = await apiService.getAuctions({ limit: 100 });
-      const watched = response.data.auctions.filter(auction => auction.isWatching);
-      setWatchedAuctions(watched);
+      const response = await apiService.getUserWatchlist();
+      setWatchedAuctions(response.data.auctions || []);
     } catch (error) {
       console.error('Failed to load watched auctions:', error);
       toast.error('Failed to load watchlist');
@@ -64,7 +62,7 @@ export const WatchlistManager = () => {
       const watchedAuction = watchedAuctions.find(a => a.auctionId === data.auctionId);
       if (watchedAuction) {
         toast.success(`Watched auction ended: ${watchedAuction.title}`, {
-          description: data.winner ? `Winner: ${data.winner.anonymousId}` : 'No winner'
+          description: data.winner ? `Winner: ${data.winner}` : 'No winner'
         });
       }
       
@@ -113,6 +111,23 @@ export const WatchlistManager = () => {
       toast.error(error.message || 'Failed to place bid');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const formatTimeRemaining = (endTime: string): string => {
+    const now = Date.now();
+    const end = new Date(endTime).getTime();
+    const remaining = end - now;
+    
+    if (remaining <= 0) return 'Ended';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
     }
   };
 
@@ -221,7 +236,7 @@ export const WatchlistManager = () => {
                     <div className="text-muted-foreground">Time Left:</div>
                     <div className={`${isEndingSoon ? 'text-terminal-red animate-pulse' : 'text-terminal-red'}`}>
                       {auction.status === 'active' 
-                        ? formatTimeRemaining(Math.floor(new Date(auction.timing.endTime).getTime() / 1000))
+                        ? formatTimeRemaining(auction.timing.endTime)
                         : 'Ended'
                       }
                     </div>

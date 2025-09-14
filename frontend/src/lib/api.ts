@@ -101,25 +101,6 @@ export interface Dispute {
   reason: string;
   status: string;
   amount: string;
-  adminAssigned?: string;
-}
-
-export interface PaymentMethod {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  fees: string;
-  processingTime: string;
-}
-
-export interface SecurityEvent {
-  eventId: string;
-  type: string;
-  description: string;
-  timestamp: string;
-  severity: string;
-  status: string;
 }
 
 export interface Notification {
@@ -192,7 +173,7 @@ class ApiService {
     return data;
   }
 
-  // Authentication - matches backend endpoints
+  // Authentication - matches backend endpoints exactly
   async login(walletAddress: string, signature?: string) {
     const body: any = { walletAddress };
     if (signature) {
@@ -234,7 +215,7 @@ class ApiService {
     return this.request('/users/activities');
   }
 
-  // Auctions - matches backend routes
+  // Auctions - matches backend routes exactly
   async getAuctions(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/auctions${queryString ? `?${queryString}` : ''}`);
@@ -309,7 +290,7 @@ class ApiService {
     });
   }
 
-  // Bidding - matches backend routes
+  // Bidding - matches backend routes exactly
   async placeBid(auctionId: string, amount: number, isAutoBid: boolean = false) {
     return this.request(`/bids/auction/${auctionId}`, {
       method: 'POST',
@@ -344,7 +325,7 @@ class ApiService {
     return this.request(`/bids/${bidId}/status`);
   }
 
-  // Market data
+  // Market data - matches backend routes
   async getMarketOverview() {
     return this.request('/overview');
   }
@@ -381,7 +362,7 @@ class ApiService {
     return this.request('/market/categories');
   }
 
-  // Wallet & Tokens
+  // Wallet & Tokens - matches backend routes
   async getWalletBalance() {
     return this.request('/wallet/balance');
   }
@@ -424,7 +405,7 @@ class ApiService {
     return this.request('/wallet/payment-methods');
   }
 
-  // Escrow
+  // Escrow - matches backend routes
   async getEscrowTransactions(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/escrow/transactions${queryString ? `?${queryString}` : ''}`);
@@ -455,7 +436,7 @@ class ApiService {
     });
   }
 
-  // Disputes
+  // Disputes - matches backend routes
   async getDisputes(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/disputes${queryString ? `?${queryString}` : ''}`);
@@ -472,7 +453,7 @@ class ApiService {
     });
   }
 
-  // Notifications
+  // Notifications - matches backend routes
   async getNotifications(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/notifications${queryString ? `?${queryString}` : ''}`);
@@ -490,7 +471,7 @@ class ApiService {
     });
   }
 
-  // Security
+  // Security - matches backend routes
   async getSecurityStatus() {
     return this.request('/security/status');
   }
@@ -507,26 +488,24 @@ class ApiService {
     return this.request(`/security/events${queryString ? `?${queryString}` : ''}`);
   }
 
-  // Admin
-  async getAdminDashboard() {
-    return this.request('/admin/dashboard');
-  }
-
-  async getPlatformStatistics(period: string = '7d') {
-    return this.request(`/admin/statistics?period=${period}`);
-  }
-
-  async approveAuction(auctionId: string, notes?: string) {
-    return this.request(`/admin/approve-auction/${auctionId}`, {
+  // Two-Factor Authentication
+  async setup2FA() {
+    return this.request('/auth/2fa/setup', {
       method: 'POST',
-      body: JSON.stringify({ notes }),
     });
   }
 
-  async rejectAuction(auctionId: string, reason: string) {
-    return this.request(`/admin/reject-auction/${auctionId}`, {
+  async verify2FA(token: string) {
+    return this.request('/auth/2fa/verify', {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  async disable2FA(token: string) {
+    return this.request('/auth/2fa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     });
   }
 

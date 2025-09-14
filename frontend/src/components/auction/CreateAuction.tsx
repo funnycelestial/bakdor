@@ -115,7 +115,7 @@ export const CreateAuction = () => {
       const response = await apiService.createAuction(payload);
 
       toast.success('Auction created successfully!', {
-        description: `Auction ID: ${response.data.auctionId}`
+        description: `Auction ID: ${response.auctionId || response.data?.auctionId}`
       });
 
       // Reset form
@@ -379,7 +379,7 @@ export const CreateAuction = () => {
         </Button>
 
         <div className="text-xs text-muted-foreground text-center">
-          Your auction will be pending admin approval before going live
+          Your auction will be pending approval before going live
         </div>
       </div>
     </Card>

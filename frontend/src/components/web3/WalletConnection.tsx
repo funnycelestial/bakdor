@@ -41,7 +41,7 @@ export const WalletConnection = () => {
     try {
       await refreshBalance();
       await refreshUser();
-      toast.success('Balance refreshed');
+      toast.success('Balance refreshed from blockchain');
     } catch (error) {
       toast.error('Failed to refresh balance');
     } finally {
@@ -62,9 +62,9 @@ export const WalletConnection = () => {
         <div className="text-center space-y-4">
           <div className="text-terminal-amber text-lg">🔐</div>
           <div>
-            <h3 className="text-terminal-green mb-2">Connect Wallet</h3>
+            <h3 className="text-terminal-green mb-2">Connect to The Backdoor</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Connect your Web3 wallet to access The Backdoor marketplace
+              Connect your Web3 wallet to access the anonymous auction marketplace
             </p>
           </div>
           
@@ -76,7 +76,7 @@ export const WalletConnection = () => {
             {isConnecting ? (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin"></div>
-                Connecting...
+                Connecting & Authenticating...
               </div>
             ) : (
               'Connect MetaMask'
@@ -97,7 +97,7 @@ export const WalletConnection = () => {
           <div className="border border-terminal-amber/30 bg-terminal-amber/10 p-3 rounded">
             <div className="text-xs text-terminal-amber mb-1">🔥 Deflationary Token Economy</div>
             <div className="text-xs text-muted-foreground">
-              Every transaction burns tokens on The Backdoor
+              Every transaction burns WKC tokens on The Backdoor
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ export const WalletConnection = () => {
   return (
     <Card className="border-panel-border bg-card/50 p-4">
       <div className="space-y-4">
-        {/* Wallet Status */}
+        {/* Connection Status */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-terminal-green rounded-full animate-pulse-slow"></div>
@@ -126,9 +126,18 @@ export const WalletConnection = () => {
           </Button>
         </div>
 
+        {/* Authentication Status */}
+        {!isAuthenticated && isConnected && (
+          <div className="text-center p-3 border border-terminal-amber/30 bg-terminal-amber/10 rounded">
+            <div className="text-xs text-terminal-amber">
+              Wallet connected but authentication failed. Please try reconnecting.
+            </div>
+          </div>
+        )}
+
         {/* User Info */}
         {user && isAuthenticated ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-2 mb-2">
               <div className="text-lg">🎭</div>
               <div>
@@ -137,43 +146,44 @@ export const WalletConnection = () => {
               </div>
             </div>
             
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Member Since:</span>
-              <span className="text-xs text-foreground">
-                {new Date(user.profile.memberSince).toLocaleDateString()}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Reputation:</span>
-              <div className="flex items-center gap-1">
-                <span className="text-terminal-green">★★★★☆</span>
-                <span className="text-xs">({user.profile.reputation.toFixed(1)})</span>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Member Since:</span>
+                <span className="text-foreground">
+                  {new Date(user.profile.memberSince).toLocaleDateString()}
+                </span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Reputation:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-green">★★★★☆</span>
+                  <span className="text-xs">({user.profile.reputation.toFixed(1)})</span>
+                </div>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Success Rate:</span>
+                <span className="text-terminal-green">{user.profile.successRate}%</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Trust Me Bros:</span>
+                <span className="text-terminal-amber">{user.profile.trustMeBros}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Auctions:</span>
+                <span className="text-foreground">{user.profile.totalAuctions}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Auctions Won:</span>
+                <span className="text-terminal-amber">{user.profile.wonAuctions}</span>
               </div>
             </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Success Rate:</span>
-              <span className="text-terminal-green">{user.profile.successRate}%</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Trust Me Bros:</span>
-              <span className="text-terminal-amber">{user.profile.trustMeBros}</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Auctions Won:</span>
-              <span className="text-terminal-amber">{user.profile.wonAuctions}</span>
-            </div>
           </div>
-        ) : (
-          <div className="text-center p-3 border border-terminal-amber/30 bg-terminal-amber/10 rounded">
-            <div className="text-xs text-terminal-amber">
-              Wallet connected but not authenticated with backend
-            </div>
-          </div>
-        )}
+        ) : null}
 
         {/* Wallet Details */}
         <div className="space-y-2 border-t border-panel-border pt-3">
@@ -221,16 +231,26 @@ export const WalletConnection = () => {
                 <span className="text-terminal-green">{formatTokenAmount(user.balance.available.toString())}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Locked:</span>
+                <span className="text-muted-foreground">Locked in Bids:</span>
                 <span className="text-terminal-amber">{formatTokenAmount(user.balance.locked.toString())}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total:</span>
                 <span className="text-foreground">{formatTokenAmount(user.balance.total.toString())}</span>
               </div>
+              
+              {/* Balance Usage Visualization */}
+              <div className="mt-2">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Balance Usage</span>
+                  <span>{((user.balance.locked / user.balance.total) * 100).toFixed(1)}% locked</span>
+                </div>
+                <Progress value={(user.balance.locked / user.balance.total) * 100} className="h-1" />
+              </div>
             </div>
           )}
           
+          {/* Token Info */}
           {tokenInfo && (
             <div className="text-xs text-muted-foreground space-y-1 border-t border-panel-border pt-2">
               <div className="flex justify-between">
@@ -263,6 +283,7 @@ export const WalletConnection = () => {
             <Button 
               size="sm" 
               className="text-xs bg-terminal-green text-background hover:bg-terminal-green/80"
+              onClick={() => toast.info('Token purchase coming soon')}
             >
               Buy WKC
             </Button>
@@ -270,6 +291,7 @@ export const WalletConnection = () => {
               size="sm" 
               variant="outline" 
               className="text-xs border-panel-border hover:bg-accent"
+              onClick={() => toast.info('Transaction history coming soon')}
             >
               View Txns
             </Button>

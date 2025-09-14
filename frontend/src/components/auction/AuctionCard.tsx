@@ -41,8 +41,13 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
 
     // Parse current bid from string
     const currentBidNum = parseFloat(currentBid.replace(/[^\d.]/g, ''));
-    if (amount <= currentBidNum) {
-      toast.error(`${isReverse ? 'Quote' : 'Bid'} must be ${isReverse ? 'lower' : 'higher'} than current ${isReverse ? 'quote' : 'bid'}`);
+    if (!isReverse && amount <= currentBidNum) {
+      toast.error(`Bid must be higher than current bid of ${currentBid}`);
+      return;
+    }
+    
+    if (isReverse && amount >= currentBidNum) {
+      toast.error(`Quote must be lower than current quote of ${currentBid}`);
       return;
     }
 

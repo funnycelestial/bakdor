@@ -94,6 +94,21 @@ export const RealTimeNotifications = () => {
     }
   };
 
+  const markAllAsRead = async () => {
+    try {
+      await apiService.markAllNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ 
+        ...n, 
+        channels: { ...n.channels, inApp: { ...n.channels.inApp, read: true } } 
+      })));
+      setUnreadCount(0);
+      toast.success('All notifications marked as read');
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      toast.error('Failed to mark all notifications as read');
+    }
+  };
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'bid_placed': return '💰';
@@ -148,11 +163,23 @@ export const RealTimeNotifications = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-terminal-green">Live Notifications</h3>
-        {unreadCount > 0 && (
-          <Badge className="bg-terminal-red/20 text-terminal-red animate-pulse-slow">
-            {unreadCount} New
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <Badge className="bg-terminal-red/20 text-terminal-red animate-pulse-slow">
+              {unreadCount} New
+            </Badge>
+          )}
+          {unreadCount > 0 && (
+            <Button
+              onClick={markAllAsRead}
+              variant="outline"
+              size="sm"
+              className="text-xs border-panel-border"
+            >
+              Mark All Read
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2 max-h-64 overflow-y-auto">

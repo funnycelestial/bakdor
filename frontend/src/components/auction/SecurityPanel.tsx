@@ -1,17 +1,21 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { apiService, SecurityEvent } from "@/lib/api";
+import { apiService } from "@/lib/api";
 import { useWeb3 } from "@/contexts/Web3Context";
 import { toast } from "sonner";
 
 export const SecurityPanel = () => {
   const { isAuthenticated, user } = useWeb3();
   const [securityStatus, setSecurityStatus] = useState<any>(null);
-  const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportIssue, setReportIssue] = useState({ type: '', description: '', severity: 'medium' });
   const [isReporting, setIsReporting] = useState(false);
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [qrCode, setQrCode] = useState('');
+  const [twoFAToken, setTwoFAToken] = useState('');
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -27,7 +31,8 @@ export const SecurityPanel = () => {
       ]);
       
       setSecurityStatus(statusResponse.data);
-      setSecurityEvents(eventsResponse.data.events);
+      setSecurityEvents(eventsResponse.data.events || []);
+      setIs2FAEnabled(statusResponse.data.features?.twoFactorAuth || false);
     } catch (error) {
       console.error('Failed to load security data:', error);
       // Use mock data for demo
@@ -35,7 +40,7 @@ export const SecurityPanel = () => {
         securityScore: 85,
         securityLevel: 'good',
         features: {
-          twoFactorAuth: true,
+          twoFactorAuth: false,
           identityVerified: true,
           walletVerified: true,
           antiPhishing: true,
@@ -51,18 +56,55 @@ export const SecurityPanel = () => {
           timestamp: "5 mins ago",
           severity: "low",
           status: "resolved"
-        },
-        {
-          eventId: "SEC_002", 
-          type: "suspicious_activity",
-          description: "Multiple rapid bids detected - Auto-flagged",
-          timestamp: "12 mins ago",
-          severity: "medium",
-          status: "monitoring"
         }
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSetup2FA = async () => {
+    try {
+      const response = await apiService.setup2FA();
+      setQrCode(response.data.qrCode);
+      toast.success('2FA setup initiated. Scan QR code with your authenticator app.');
+    } catch (error: any) {
+      console.error('Failed to setup 2FA:', error);
+      toast.error(error.message || 'Failed to setup 2FA');
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    if (!twoFAToken || twoFAToken.length !== 6) {
+      toast.error('Please enter a valid 6-digit code');
+      return;
+    }
+
+    try {
+      await apiService.verify2FA(twoFAToken);
+      setIs2FAEnabled(true);
+      setQrCode('');
+      setTwoFAToken('');
+      await loadSecurityData();
+      toast.success('2FA enabled successfully');
+    } catch (error: any) {
+      console.error('Failed to verify 2FA:', error);
+      toast.error(error.message || 'Failed to verify 2FA');
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    const token = prompt('Enter your 2FA code to disable:');
+    if (!token) return;
+
+    try {
+      await apiService.disable2FA(token);
+      setIs2FAEnabled(false);
+      await loadSecurityData();
+      toast.success('2FA disabled successfully');
+    } catch (error: any) {
+      console.error('Failed to disable 2FA:', error);
+      toast.error(error.message || 'Failed to disable 2FA');
     }
   };
 
@@ -160,6 +202,70 @@ export const SecurityPanel = () => {
         </div>
       </Card>
 
+      {/* Two-Factor Authentication */}
+      <Card className="border-panel-border bg-secondary/20 p-3">
+        <h4 className="text-sm font-medium text-foreground mb-3">Two-Factor Authentication</h4>
+        {!is2FAEnabled ? (
+          <div className="space-y-3">
+            {!qrCode ? (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Add an extra layer of security to your account
+                </div>
+                <Button
+                  onClick={handleSetup2FA}
+                  size="sm"
+                  className="w-full bg-terminal-green text-background hover:bg-terminal-green/80"
+                >
+                  Setup 2FA
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  Scan this QR code with your authenticator app:
+                </div>
+                <div className="flex justify-center">
+                  <img src={qrCode} alt="2FA QR Code" className="w-32 h-32" />
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Enter 6-digit code"
+                    value={twoFAToken}
+                    onChange={(e) => setTwoFAToken(e.target.value)}
+                    maxLength={6}
+                    className="text-center bg-background border-panel-border"
+                  />
+                  <Button
+                    onClick={handleVerify2FA}
+                    disabled={twoFAToken.length !== 6}
+                    size="sm"
+                    className="w-full bg-terminal-green text-background hover:bg-terminal-green/80"
+                  >
+                    Verify & Enable 2FA
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-terminal-green">✓</span>
+              <span className="text-xs text-foreground">2FA is enabled</span>
+            </div>
+            <Button
+              onClick={handleDisable2FA}
+              size="sm"
+              variant="outline"
+              className="w-full text-xs border-terminal-red text-terminal-red hover:bg-terminal-red/10"
+            >
+              Disable 2FA
+            </Button>
+          </div>
+        )}
+      </Card>
+
       {/* Anonymity Protection */}
       <Card className="border-panel-border bg-secondary/20 p-3">
         <h4 className="text-sm font-medium text-foreground mb-3">Anonymity Protection</h4>
@@ -209,7 +315,7 @@ export const SecurityPanel = () => {
             onChange={(e) => setReportIssue(prev => ({ ...prev, type: e.target.value }))}
             className="w-full bg-background border border-panel-border px-2 py-1 text-xs focus:border-terminal-green focus:outline-none"
           >
-            <option value="other">Select Issue Type</option>
+            <option value="">Select Issue Type</option>
             <option value="suspicious_activity">Suspicious Activity</option>
             <option value="phishing_attempt">Phishing Attempt</option>
             <option value="unauthorized_access">Unauthorized Access</option>
@@ -236,14 +342,17 @@ export const SecurityPanel = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-2">
-        <button className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors">
-          Security Settings
-        </button>
         <button 
           onClick={() => loadSecurityData()}
           className="bg-terminal-green/20 hover:bg-terminal-green/30 px-2 py-1 text-xs text-terminal-green transition-colors"
         >
           Refresh Status
+        </button>
+        <button 
+          onClick={() => toast.info('Security settings coming soon')}
+          className="bg-secondary hover:bg-accent px-2 py-1 text-xs transition-colors"
+        >
+          Settings
         </button>
       </div>
     </div>
