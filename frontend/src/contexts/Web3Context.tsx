@@ -1,19 +1,39 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { web3Service, WalletConnection, TokenInfo } from '@/lib/web3';
+import { ethers } from 'ethers';
 import { apiService, User } from '@/lib/api';
 import { formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
+
+interface WalletConnection {
+  address: string;
+  provider: ethers.BrowserProvider;
+  signer: ethers.JsonRpcSigner;
+  chainId: number;
+}
+
+interface TokenInfo {
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: string;
+  totalBurned: string;
+  circulatingSupply: string;
+  burnRate: number;
+}
 
 interface Web3ContextType {
   // Wallet state
   isConnected: boolean;
   isConnecting: boolean;
+  isAuthenticating: boolean;
   walletAddress: string | null;
   chainId: number | null;
+  walletType: string | null;
   
   // User state
   user: User | null;
   isAuthenticated: boolean;
+  authError: string | null;
   
   // Token state
   tokenInfo: TokenInfo | null;
@@ -25,6 +45,7 @@ interface Web3ContextType {
   refreshBalance: () => Promise<void>;
   refreshTokenInfo: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  clearAuthError: () => void;
 }
 
 const Web3Context = createContext<Web3ContextType | null>(null);
@@ -44,10 +65,13 @@ interface Web3ProviderProps {
 export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
+  const [walletType, setWalletType] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [balance, setBalance] = useState('0');
 
@@ -71,31 +95,87 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     }
   }, []);
 
+  const detectWalletType = () => {
+    if (typeof window !== 'undefined') {
+      if (window.ethereum?.isMetaMask) return 'MetaMask';
+      if (window.ethereum?.isCoinbaseWallet) return 'Coinbase Wallet';
+      if (window.ethereum?.isBinance) return 'Binance Wallet';
+      if (window.ethereum?.isWalletConnect) return 'WalletConnect';
+      if (window.ethereum) return 'Unknown Wallet';
+    }
+    return null;
+  };
+
+  const connectToWallet = async (): Promise<WalletConnection> => {
+    if (!window.ethereum) {
+      throw new Error('No Web3 wallet detected. Please install MetaMask, Coinbase Wallet, or Binance Wallet.');
+    }
+
+    try {
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      const network = await provider.getNetwork();
+
+      return {
+        address,
+        provider,
+        signer,
+        chainId: Number(network.chainId)
+      };
+    } catch (error: any) {
+      if (error.code === 4001) {
+        throw new Error('Wallet connection rejected by user');
+      }
+      throw new Error(`Wallet connection failed: ${error.message}`);
+    }
+  };
+
+  const signMessage = async (message: string, signer: ethers.JsonRpcSigner): Promise<string> => {
+    try {
+      return await signer.signMessage(message);
+    } catch (error: any) {
+      if (error.code === 4001) {
+        throw new Error('Message signing rejected by user');
+      }
+      throw new Error(`Message signing failed: ${error.message}`);
+    }
+  };
   const checkExistingConnection = async () => {
     try {
+      setAuthError(null);
       // Check if wallet is already connected
       if (typeof window !== 'undefined' && window.ethereum) {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         if (accounts.length > 0) {
-          const connection = await web3Service.connectWallet();
+          const connection = await connectToWallet();
           setWalletAddress(connection.address);
           setChainId(connection.chainId);
+          setWalletType(detectWalletType());
           setIsConnected(true);
           
           // Check for existing auth token
           const token = apiService.getAuthToken();
           if (token) {
             try {
-              await authenticateUser(connection.address);
+              setIsAuthenticating(true);
+              await authenticateUser(connection.address, connection.signer);
             } catch (error) {
               console.error('Failed to authenticate with existing token:', error);
               apiService.clearAuthToken();
+              setAuthError('Session expired. Please reconnect your wallet.');
+            } finally {
+              setIsAuthenticating(false);
             }
           }
         }
       }
     } catch (error) {
       console.error('Error checking existing connection:', error);
+      setAuthError('Failed to check wallet connection');
     }
   };
 
@@ -104,6 +184,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       disconnectWallet();
     } else if (accounts[0] !== walletAddress) {
       // Account changed, reconnect
+      setAuthError(null);
       connectWallet();
     }
   };
@@ -113,14 +194,15 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     toast.info('Network changed. Please refresh if you experience issues.');
   };
 
-  const authenticateUser = async (address: string) => {
+  const authenticateUser = async (address: string, signer: ethers.JsonRpcSigner) => {
     try {
+      setAuthError(null);
       // Step 1: Get nonce for signing
       const nonceResponse = await apiService.login(address);
       
       if (nonceResponse.step === 'sign') {
         // Need to sign the message
-        const signature = await web3Service.signMessage(nonceResponse.message);
+        const signature = await signMessage(nonceResponse.message, signer);
         
         // Step 2: Send signature for verification
         const authResponse = await apiService.login(address, signature);
@@ -160,6 +242,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Authentication failed:', error);
+      setAuthError(error.message || 'Authentication failed');
       throw error;
     }
   };
@@ -168,65 +251,72 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     if (isConnecting) return;
     
     setIsConnecting(true);
+    setAuthError(null);
     
     try {
       // Connect wallet
-      const connection = await web3Service.connectWallet();
+      const connection = await connectToWallet();
       setWalletAddress(connection.address);
       setChainId(connection.chainId);
+      setWalletType(detectWalletType());
       setIsConnected(true);
       
+      toast.success(`${detectWalletType()} connected successfully`);
+      
       // Authenticate with backend
+      setIsAuthenticating(true);
       await authenticateUser(connection.address);
       
     } catch (error: any) {
       console.error('Wallet connection failed:', error);
-      toast.error(error.message || 'Failed to connect wallet');
+      const errorMessage = error.message || 'Failed to connect wallet';
+      setAuthError(errorMessage);
+      toast.error(errorMessage);
       setIsConnected(false);
       setWalletAddress(null);
       setChainId(null);
+      setWalletType(null);
     } finally {
       setIsConnecting(false);
+      setIsAuthenticating(false);
     }
   };
 
   const disconnectWallet = () => {
-    web3Service.disconnect();
     apiService.clearAuthToken();
     apiService.disconnectSocket();
     setIsConnected(false);
     setWalletAddress(null);
     setChainId(null);
+    setWalletType(null);
     setUser(null);
     setIsAuthenticated(false);
+    setAuthError(null);
     setTokenInfo(null);
     setBalance('0');
     toast.info('Wallet disconnected');
   };
 
+  const clearAuthError = () => {
+    setAuthError(null);
+  };
   const refreshBalance = async () => {
     if (!walletAddress || !isAuthenticated) return;
     
     try {
       // Get balance from backend (which syncs with blockchain)
       const response = await apiService.refreshBalance();
-      setBalance(response.balance.available.toString());
+      setBalance(response.data.balance.available.toString());
     } catch (error) {
       console.error('Failed to refresh balance:', error);
-      // Fallback to direct blockchain call
-      try {
-        const blockchainBalance = await web3Service.getTokenBalance(walletAddress);
-        setBalance(blockchainBalance);
-      } catch (blockchainError) {
-        console.error('Failed to get blockchain balance:', error);
-      }
+      toast.error('Failed to refresh balance');
     }
   };
 
   const refreshTokenInfo = async () => {
     try {
-      const info = await apiService.getTokenInfo();
-      setTokenInfo(info.data.token);
+      const response = await apiService.getTokenInfo();
+      setTokenInfo(response.data.token);
     } catch (error) {
       console.error('Failed to refresh token info:', error);
       // Use mock data as fallback
@@ -256,10 +346,13 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const value: Web3ContextType = {
     isConnected,
     isConnecting,
+    isAuthenticating,
     walletAddress,
     chainId,
+    walletType,
     user,
     isAuthenticated,
+    authError,
     tokenInfo,
     balance,
     connectWallet,
@@ -267,6 +360,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     refreshBalance,
     refreshTokenInfo,
     refreshUser,
+    clearAuthError,
   };
 
   return (

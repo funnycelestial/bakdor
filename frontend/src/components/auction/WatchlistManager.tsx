@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiService, Auction } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
 
 export const WatchlistManager = () => {
-  const { isAuthenticated, user } = useWeb3();
+  const { isAuthenticated, user, connectWallet, isConnecting } = useWeb3();
   const [watchedAuctions, setWatchedAuctions] = useState<Auction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -17,10 +18,13 @@ export const WatchlistManager = () => {
     if (isAuthenticated) {
       loadWatchedAuctions();
       setupRealTimeUpdates();
+    } else {
+      setIsLoading(false);
     }
   }, [isAuthenticated]);
 
   const loadWatchedAuctions = async () => {
+    setIsLoading(true);
     try {
       const response = await apiService.getUserWatchlist();
       setWatchedAuctions(response.data.auctions || []);
@@ -134,12 +138,21 @@ export const WatchlistManager = () => {
   if (!isAuthenticated) {
     return (
       <Card className="border-panel-border bg-card/50 p-4">
-        <div className="text-center space-y-4">
-          <div className="text-terminal-amber text-lg">🔐</div>
-          <div className="text-sm text-muted-foreground">
-            Connect your wallet to view watchlist
-          </div>
-        </div>
+        <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+          <AlertDescription className="text-terminal-amber text-xs">
+            <div className="flex items-center justify-between">
+              <span>Connect your wallet to manage your watchlist</span>
+              <Button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                size="sm"
+                className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+              >
+                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       </Card>
     );
   }

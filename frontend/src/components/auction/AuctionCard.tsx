@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { apiService } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { toast } from 'sonner';
@@ -20,13 +21,18 @@ interface AuctionCardProps {
 export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, isHot, auctionType = 'forward', watchers, onBidClick }: AuctionCardProps) => {
   const isUrgent = timeLeft.includes('m') && parseInt(timeLeft) < 10;
   const isReverse = auctionType === 'reverse';
-  const { isAuthenticated, user, balance } = useWeb3();
+  const { isAuthenticated, user, balance, connectWallet, isConnecting } = useWeb3();
   const [isPlacingBid, setIsPlacingBid] = useState(false);
   const [isWatching, setIsWatching] = useState(false);
 
   const handleBidClick = async () => {
     if (!isAuthenticated) {
-      toast.error('Please connect your wallet to place bids');
+      toast.info('Connect your wallet to place bids', {
+        action: {
+          label: 'Connect',
+          onClick: connectWallet
+        }
+      });
       return;
     }
 
@@ -72,7 +78,12 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
 
   const handleWatchClick = async () => {
     if (!isAuthenticated) {
-      toast.error('Please connect your wallet to watch auctions');
+      toast.info('Connect your wallet to watch auctions', {
+        action: {
+          label: 'Connect',
+          onClick: connectWallet
+        }
+      });
       return;
     }
 
@@ -119,13 +130,23 @@ export const AuctionCard = ({ auctionId, item, currentBid, timeLeft, category, i
           >
             {isWatching ? '👁️ Watching' : 'Watch'}
           </button>
-          <button 
-            onClick={handleBidClick}
-            disabled={isPlacingBid}
-            className="bg-primary hover:bg-primary/80 px-2 py-1 text-xs text-primary-foreground transition-colors disabled:opacity-50 flex-1 min-w-0 truncate"
-          >
-            {isPlacingBid ? '⟳' : (isReverse ? 'Quote' : 'Bid')}
-          </button>
+          {isAuthenticated ? (
+            <button 
+              onClick={handleBidClick}
+              disabled={isPlacingBid}
+              className="bg-primary hover:bg-primary/80 px-2 py-1 text-xs text-primary-foreground transition-colors disabled:opacity-50 flex-1 min-w-0 truncate"
+            >
+              {isPlacingBid ? '⟳' : (isReverse ? 'Quote' : 'Bid')}
+            </button>
+          ) : (
+            <button 
+              onClick={connectWallet}
+              disabled={isConnecting}
+              className="bg-terminal-amber hover:bg-terminal-amber/80 px-2 py-1 text-xs text-background transition-colors disabled:opacity-50 flex-1 min-w-0 truncate"
+            >
+              {isConnecting ? '⟳' : 'Connect to Bid'}
+            </button>
+          )}
         </div>
       </div>
     </div>

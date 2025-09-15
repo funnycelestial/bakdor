@@ -175,9 +175,10 @@ class ApiService {
 
   // Authentication - matches backend endpoints exactly
   async login(walletAddress: string, signature?: string) {
-    const body: any = { walletAddress };
+    const body: any = { walletAddress: walletAddress.toLowerCase() };
     if (signature) {
       body.signature = signature;
+      // The message is reconstructed on backend, so we don't need to send it
     }
     
     return this.request('/users/login', {
@@ -191,7 +192,7 @@ class ApiService {
   }
 
   async updateProfile(profileData: any) {
-    return this.request('/users/me', {
+    return this.request('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData),
     });
@@ -369,7 +370,7 @@ class ApiService {
 
   async getTransactionHistory(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
-    return this.request(`/wallet/transactions${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/token-transactions/history${queryString ? `?${queryString}` : ''}`);
   }
 
   async depositTokens(amount: number, transactionHash: string) {
@@ -394,11 +395,11 @@ class ApiService {
   }
 
   async getTokenInfo() {
-    return this.request('/tokens/info');
+    return this.request('/token-transactions/info');
   }
 
   async getBurnStats(period: string = '30d') {
-    return this.request(`/tokens/burn-stats?period=${period}`);
+    return this.request(`/token-transactions/burn-stats?period=${period}`);
   }
 
   async getPaymentMethods() {
@@ -521,6 +522,7 @@ class ApiService {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      timeout: 20000,
     });
 
     this.socket.on('connect', () => {
@@ -535,6 +537,9 @@ class ApiService {
       console.error('WebSocket connection error:', error);
     });
 
+    this.socket.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
     return this.socket;
   }
 

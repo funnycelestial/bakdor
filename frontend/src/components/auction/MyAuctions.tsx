@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { apiService, Auction, Bid } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
 
 export const MyAuctions = () => {
-  const { isAuthenticated, user } = useWeb3();
+  const { isAuthenticated, user, connectWallet, isConnecting } = useWeb3();
   const [myAuctions, setMyAuctions] = useState<Auction[]>([]);
   const [myBids, setMyBids] = useState<Bid[]>([]);
   const [wonAuctions, setWonAuctions] = useState<Auction[]>([]);
@@ -18,10 +20,13 @@ export const MyAuctions = () => {
   useEffect(() => {
     if (isAuthenticated) {
       loadMyData();
+    } else {
+      setIsLoading(false);
     }
   }, [isAuthenticated]);
 
   const loadMyData = async () => {
+    setIsLoading(true);
     try {
       const [auctionsResponse, bidsResponse, wonResponse] = await Promise.all([
         apiService.getMyAuctions({ limit: 50 }),
@@ -106,12 +111,21 @@ export const MyAuctions = () => {
   if (!isAuthenticated) {
     return (
       <Card className="border-panel-border bg-card/50 p-4">
-        <div className="text-center space-y-4">
-          <div className="text-terminal-amber text-lg">🔐</div>
-          <div className="text-sm text-muted-foreground">
-            Connect your wallet to view your auctions
-          </div>
-        </div>
+        <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+          <AlertDescription className="text-terminal-amber text-xs">
+            <div className="flex items-center justify-between">
+              <span>Connect your wallet to view your auctions and bids</span>
+              <Button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                size="sm"
+                className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+              >
+                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       </Card>
     );
   }

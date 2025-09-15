@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { formatAddress, formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
@@ -11,16 +12,20 @@ export const WalletConnection = () => {
   const { 
     isConnected, 
     isConnecting, 
+    isAuthenticating,
     walletAddress, 
     chainId, 
+    walletType,
     user, 
     balance, 
     tokenInfo,
     isAuthenticated,
+    authError,
     connectWallet, 
     disconnectWallet,
     refreshBalance,
-    refreshUser
+    refreshUser,
+    clearAuthError
   } = useWeb3();
 
   const [showFullAddress, setShowFullAddress] = useState(false);
@@ -36,6 +41,12 @@ export const WalletConnection = () => {
     }
   };
 
+  const getSupportedWallets = () => [
+    { name: 'MetaMask', detected: window.ethereum?.isMetaMask },
+    { name: 'Coinbase Wallet', detected: window.ethereum?.isCoinbaseWallet },
+    { name: 'Binance Wallet', detected: window.ethereum?.isBinance },
+    { name: 'WalletConnect', detected: window.ethereum?.isWalletConnect }
+  ];
   const handleRefreshBalance = async () => {
     setIsRefreshing(true);
     try {
@@ -56,6 +67,10 @@ export const WalletConnection = () => {
     }
   };
 
+  const handleConnectWallet = async () => {
+    clearAuthError();
+    await connectWallet();
+  };
   if (!isConnected) {
     return (
       <Card className="border-panel-border bg-card/50 p-4">
@@ -68,29 +83,37 @@ export const WalletConnection = () => {
             </p>
           </div>
           
+          {authError && (
+            <Alert className="border-terminal-red/50 bg-terminal-red/10">
+              <AlertDescription className="text-terminal-red text-xs">
+                {authError}
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <Button 
-            onClick={connectWallet}
+            onClick={handleConnectWallet}
             disabled={isConnecting}
             className="w-full bg-terminal-green text-background hover:bg-terminal-green/80"
           >
             {isConnecting ? (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin"></div>
-                Connecting & Authenticating...
+                {isAuthenticating ? 'Authenticating...' : 'Connecting...'}
               </div>
             ) : (
-              'Connect MetaMask'
+              'Connect Wallet'
             )}
           </Button>
           
           <div className="text-xs text-muted-foreground">
             <p>Supported wallets:</p>
-            <div className="flex justify-center gap-2 mt-1">
-              <span>MetaMask</span>
-              <span>•</span>
-              <span>WalletConnect</span>
-              <span>•</span>
-              <span>Coinbase</span>
+            <div className="grid grid-cols-2 gap-1 mt-2">
+              {getSupportedWallets().map((wallet) => (
+                <div key={wallet.name} className={`text-xs ${wallet.detected ? 'text-terminal-green' : 'text-muted-foreground'}`}>
+                  {wallet.detected ? '✓' : '○'} {wallet.name}
+                </div>
+              ))}
             </div>
           </div>
           
@@ -111,10 +134,21 @@ export const WalletConnection = () => {
         {/* Connection Status */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-terminal-green rounded-full animate-pulse-slow"></div>
+            <div className={`w-3 h-3 rounded-full animate-pulse-slow ${
+              isAuthenticated ? 'bg-terminal-green' : 
+              isAuthenticating ? 'bg-terminal-amber' : 
+              'bg-terminal-red'
+            }`}></div>
             <span className="text-terminal-green text-sm">
-              {isAuthenticated ? 'AUTHENTICATED' : 'CONNECTED'}
+              {isAuthenticated ? 'AUTHENTICATED' : 
+               isAuthenticating ? 'AUTHENTICATING' : 
+               'CONNECTED'}
             </span>
+            {walletType && (
+              <Badge variant="outline" className="text-xs">
+                {walletType}
+              </Badge>
+            )}
           </div>
           <Button 
             onClick={disconnectWallet}
@@ -127,12 +161,49 @@ export const WalletConnection = () => {
         </div>
 
         {/* Authentication Status */}
-        {!isAuthenticated && isConnected && (
-          <div className="text-center p-3 border border-terminal-amber/30 bg-terminal-amber/10 rounded">
-            <div className="text-xs text-terminal-amber">
-              Wallet connected but authentication failed. Please try reconnecting.
-            </div>
-          </div>
+        {!isAuthenticated && isConnected && !isAuthenticating && (
+          <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+            <AlertDescription className="text-terminal-amber text-xs">
+              <div className="flex items-center justify-between">
+                <span>Authentication required to access features</span>
+                <Button
+                  onClick={handleConnectWallet}
+                  size="sm"
+                  className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+                >
+                  Authenticate
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isAuthenticating && (
+          <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+            <AlertDescription className="text-terminal-amber text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 border border-terminal-amber border-t-transparent rounded-full animate-spin"></div>
+                Authenticating with The Backdoor...
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {authError && !isAuthenticating && (
+          <Alert className="border-terminal-red/50 bg-terminal-red/10">
+            <AlertDescription className="text-terminal-red text-xs">
+              <div className="flex items-center justify-between">
+                <span>{authError}</span>
+                <Button
+                  onClick={handleConnectWallet}
+                  size="sm"
+                  className="bg-terminal-red text-background hover:bg-terminal-red/80"
+                >
+                  Retry
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* User Info */}
@@ -206,7 +277,8 @@ export const WalletConnection = () => {
         </div>
 
         {/* Token Balance */}
-        <div className="space-y-2 border-t border-panel-border pt-3">
+        {isAuthenticated && (
+          <div className="space-y-2 border-t border-panel-border pt-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">WKC Balance:</span>
             <div className="flex items-center gap-2">
@@ -275,7 +347,8 @@ export const WalletConnection = () => {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         {isAuthenticated && (

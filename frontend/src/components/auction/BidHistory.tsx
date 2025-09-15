@@ -3,13 +3,14 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiService, Bid } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { formatTokenAmount } from '@/utils/formatters';
 import { toast } from 'sonner';
 
 export const BidHistory = () => {
-  const { isAuthenticated, user } = useWeb3();
+  const { isAuthenticated, user, connectWallet, isConnecting } = useWeb3();
   const [bids, setBids] = useState<Bid[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -23,10 +24,13 @@ export const BidHistory = () => {
   useEffect(() => {
     if (isAuthenticated) {
       loadBidHistory();
+    } else {
+      setIsLoading(false);
     }
   }, [isAuthenticated, filter]);
 
   const loadBidHistory = async () => {
+    setIsLoading(true);
     try {
       const params: any = { limit: 50 };
       if (filter !== 'all') params.status = filter;
@@ -83,12 +87,21 @@ export const BidHistory = () => {
   if (!isAuthenticated) {
     return (
       <Card className="border-panel-border bg-card/50 p-4">
-        <div className="text-center space-y-4">
-          <div className="text-terminal-amber text-lg">🔐</div>
-          <div className="text-sm text-muted-foreground">
-            Connect your wallet to view bid history
-          </div>
-        </div>
+        <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+          <AlertDescription className="text-terminal-amber text-xs">
+            <div className="flex items-center justify-between">
+              <span>Connect your wallet to view bid history & analytics</span>
+              <Button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                size="sm"
+                className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+              >
+                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       </Card>
     );
   }

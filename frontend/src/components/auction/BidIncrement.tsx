@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiService } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { formatTokenAmount } from '@/utils/formatters';
@@ -22,7 +23,7 @@ export const BidIncrement = ({
   userBalance, 
   onBidPlaced 
 }: BidIncrementProps) => {
-  const { isAuthenticated } = useWeb3();
+  const { isAuthenticated, connectWallet, isConnecting } = useWeb3();
   const [customAmount, setCustomAmount] = useState('');
   const [isPlacing, setIsPlacing] = useState(false);
 
@@ -34,11 +35,20 @@ export const BidIncrement = ({
   ];
 
   const handleQuickBid = async (increment: number) => {
+    if (!isAuthenticated) {
+      toast.error('Please connect your wallet to place bids');
+      return;
+    }
     const newBidAmount = currentBid + increment;
     await placeBid(newBidAmount);
   };
 
   const handleCustomBid = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please connect your wallet to place bids');
+      return;
+    }
+    
     const amount = parseFloat(customAmount);
     if (!amount || amount <= currentBid) {
       toast.error(`Bid must be higher than current bid of ${formatTokenAmount(currentBid.toString())} WKC`);
@@ -48,10 +58,6 @@ export const BidIncrement = ({
   };
 
   const placeBid = async (amount: number) => {
-    if (!isAuthenticated) {
-      toast.error('Please connect your wallet');
-      return;
-    }
 
     const balance = parseFloat(userBalance);
     if (amount > balance) {
@@ -76,12 +82,21 @@ export const BidIncrement = ({
 
   if (!isAuthenticated) {
     return (
-      <div className="text-center p-3 border border-panel-border bg-secondary/20 rounded">
-        <div className="text-terminal-amber mb-2">🔐</div>
-        <div className="text-xs text-muted-foreground">
-          Connect wallet to place bids
-        </div>
-      </div>
+      <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+        <AlertDescription className="text-terminal-amber text-xs">
+          <div className="flex items-center justify-between">
+            <span>Connect your wallet to place bids</span>
+            <Button
+              onClick={connectWallet}
+              disabled={isConnecting}
+              size="sm"
+              className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
     );
   }
 

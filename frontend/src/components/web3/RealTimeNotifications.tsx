@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiService, Notification } from '@/lib/api';
 import { useWeb3 } from '@/contexts/Web3Context';
 import { toast } from 'sonner';
 
 export const RealTimeNotifications = () => {
-  const { isAuthenticated, user } = useWeb3();
+  const { isAuthenticated, user, connectWallet, isConnecting } = useWeb3();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,10 +16,13 @@ export const RealTimeNotifications = () => {
     if (isAuthenticated) {
       loadNotifications();
       setupRealTimeNotifications();
+    } else {
+      setIsLoading(false);
     }
   }, [isAuthenticated]);
 
   const loadNotifications = async () => {
+    setIsLoading(true);
     try {
       const response = await apiService.getNotifications({ limit: 20 });
       setNotifications(response.data.notifications || []);
@@ -139,12 +143,21 @@ export const RealTimeNotifications = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="text-center space-y-2">
-        <div className="text-terminal-amber text-lg">🔐</div>
-        <div className="text-sm text-muted-foreground">
-          Connect to The Backdoor for notifications
-        </div>
-      </div>
+      <Alert className="border-terminal-amber/50 bg-terminal-amber/10">
+        <AlertDescription className="text-terminal-amber text-xs">
+          <div className="flex items-center justify-between">
+            <span>Connect wallet for live notifications</span>
+            <Button
+              onClick={connectWallet}
+              disabled={isConnecting}
+              size="sm"
+              className="bg-terminal-amber text-background hover:bg-terminal-amber/80"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
     );
   }
 
